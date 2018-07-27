@@ -1,0 +1,13 @@
+Package: maveclin
+Title: Clinical predictions for MaveDB
+Version: 0.0.0.9000
+Authors@R: person("Jochen", "Weile", email = "jochenweile@gmail.com", role = c("aut", "cre"))
+Description: Calculate case-specific posteriors for variant effects from MaveDB
+Depends: R (>= 3.2.3)
+License: GPL
+Encoding: UTF-8
+LazyData: true
+Suggests: testthat
+Imports: rapimave, hgvsParseR, yogitools, httr
+Remotes: github::jweile/rapimave, github::jweile/hgvsParseR, github::jweile/yogitools
+RoxygenNote: 6.0.1
