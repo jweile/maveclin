@@ -4,17 +4,22 @@
 \alias{map2bf.file}
 \title{Calibrate a variant map from a file to Bayes Factors}
 \usage{
-map2bf.file(csvfile, ensembls, symbols, drawPlot = TRUE)
+map2bf.file(csvfile, ensembls, symbols, drawPlot = TRUE, minMaf = 0,
+  flip = FALSE, overrideCache = FALSE, logger = NULL)
 }
 \arguments{
 \item{csvfile}{the scoreset file in csv format}
 
+\item{ensembls}{a vector of ensembl IDs for the target gene}
+
+\item{symbols}{a vector of gene symbols of the target gene}
+
 \item{drawPlot}{boolean value indicating whether a plot of variant distributions
 should be drawn. Defaults to \code{TRUE}.}
 
-\item{ensembl}{the ensembl ID for the target gene}
+\item{overrideCache}{logical; whether to override local cache.}
 
-\item{symbol}{the gene symbol of the target gene}
+\item{logger}{a yogilogger object to which to write log messages.}
 }
 \value{
 a \code{data.frame} containing the original \code{scores} input

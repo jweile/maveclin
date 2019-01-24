@@ -4,10 +4,10 @@ Version: 0.0.0.9000
 Authors@R: person("Jochen", "Weile", email = "jochenweile@gmail.com", role = c("aut", "cre"))
 Description: Calculate case-specific posteriors for variant effects from MaveDB
 Depends: R (>= 3.2.3)
-License: GPL
+License: AGPL-3 + file COPYING
 Encoding: UTF-8
 LazyData: true
 Suggests: testthat
-Imports: rapimave, hgvsParseR, yogitools, httr
-Remotes: github::jweile/rapimave, github::jweile/hgvsParseR, github::jweile/yogitools
-RoxygenNote: 6.0.1
+Imports: rapimave, hgvsParseR, yogitools, httr, yogilog
+Remotes: github::jweile/rapimave, github::jweile/hgvsParseR, github::jweile/yogitools, github::jweile/yogilog
+RoxygenNote: 6.1.0

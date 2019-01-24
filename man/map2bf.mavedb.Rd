@@ -4,17 +4,22 @@
 \alias{map2bf.mavedb}
 \title{Calibrate a variant map from MaveDB to Bayes Factors}
 \usage{
-map2bf.mavedb(ssid, ensembls, symbols, drawPlot = TRUE)
+map2bf.mavedb(ssid, ensembls, symbols, drawPlot = TRUE, minMaf = 0,
+  flip = FALSE, overrideCache = FALSE, logger = NULL)
 }
 \arguments{
 \item{ssid}{the scoreset id (URN) from MaveDB}
 
+\item{ensembls}{a vector of ensembl IDs for the target gene}
+
+\item{symbols}{a vector of gene symbols of the target gene}
+
 \item{drawPlot}{boolean value indicating whether a plot of variant distributions
 should be drawn. Defaults to \code{TRUE}.}
 
-\item{ensembl}{the ensembl ID for the target gene}
+\item{overrideCache}{logical; whether to override local cache.}
 
-\item{symbol}{the gene symbol of the target gene}
+\item{logger}{a yogilogger object to which to write log messages.}
 }
 \value{
 a \code{data.frame} containing the original \code{scores} input
@@ -23,4 +28,12 @@ a \code{data.frame} containing the original \code{scores} input
 }
 \description{
 Calibrate a variant map from MaveDB to Bayes Factors
+}
+\examples{
+
+maveUrn <- "urn:mavedb:00000001-c-2"
+ensembls <- c("ENSG00000198668","ENSG00000143933","ENSG00000160014")
+symbols <- c("CALM1","CALM2","CALM3")
+calmBFs <- map2bf.mavedb(maveUrn,ensembls,symbols)
+
 }

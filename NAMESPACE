@@ -2,6 +2,8 @@
 
 export(fetchClinvar)
 export(fetchGnomad)
+export(getCacheFile)
+export(goldStandardScores)
 export(map2bf)
 export(map2bf.file)
 export(map2bf.mavedb)

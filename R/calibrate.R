@@ -1,3 +1,47 @@
+# Copyright (C) 2018  Jochen Weile, Roth Lab
+#
+# This file is part of MaveClin.
+#
+# MaveClin is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# MaveClin is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with MaveClin.  If not, see <https://www.gnu.org/licenses/>.
+
+
+#' Find cache file location by name
+#' 
+#' Finds the location for a cache file. The file does not necessary need to exist yet,
+#' as this function is meant to be used determine to a location for both storage and retrieval.
+#' 
+#' Depending on the execution context, the storage location may differ. The cache location can 
+#' be controlled with the environment variable \code{$MAVECLIN_CACHE}. This will be made use of within
+#' the mavevis server docker container. If the variable is not set, a directory ".mavecache/"
+#' will be created in the user's home directory to be used as the storage location.
+#' 
+#' @param name the name of the file, e.g. "P12456_alignment.fasta"
+#' @return the full path to the file
+#' @export
+#' @examples
+#' file <- getCacheFile("P12345_alignment.fasta")
+#' 
+getCacheFile <- function(name) {
+	cache.loc <- Sys.getenv("MAVECLIN_CACHE",unset=NA)
+	if (is.na(cache.loc)) {
+		cache.loc <- paste0(Sys.getenv("HOME"),"/.mavecache/")
+	}
+	if (!file.exists(cache.loc)) {
+		dir.create(cache.loc,showWarnings=FALSE,recursive=TRUE)
+	}
+	paste0(cache.loc,name)
+}
 
 #' Decode HTML strings
 #' 
@@ -20,6 +64,10 @@ htmlDecode <- function(str) {
 #' and filters them down to missense variants
 #' 
 #' @param gene gene name as in ClinVar (e.g. 'CALM1')
+#' @param stagger logical determining whether HTTP requests should be staggered by
+#'   a third of a second to avoid rejection by the server. Defaults to TRUE.
+#' @param overrideCache logical determining whether local cache should be overridden
+#' @param logger a yogilogger object to write log messages to. Defaults to NULL
 #' @return a \code{data.frame} with the following columns:
 #' \itemize{
 #'   \item \code{hgvsc} The HGVS variant descriptor at the coding sequence (DNA) level
@@ -28,90 +76,128 @@ htmlDecode <- function(str) {
 #' }
 #' @export
 #' 
-fetchClinvar <- function(gene) {
+fetchClinvar <- function(gene,stagger=TRUE,overrideCache=FALSE,logger=NULL) {
 
-	library(httr)
-	library(RJSONIO)
-	library(yogitools)
+	if (!is.null(logger)) {
+		stopifnot(inherits(logger,"yogilogger"))
+		library("yogilog")
+	}
 
-	set_config(config(ssl_verifypeer = 0L))
+	cacheFile <- getCacheFile(paste0("clinvar_",gene,".csv"))
 
-	#This is a two-step process: First we have to query Clinvar for a list of matching
-	# DB entries. Then we can make a query for the details of the matched entries.
+	if (!file.exists(cacheFile) || overrideCache) {
 
-	searchBase <- "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-	summaryBase <- "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+		library(httr)
+		library(RJSONIO)
+		library(yogitools)
 
-	clinvarIds <- character()
+		set_config(config(ssl_verifypeer = 0L))
 
-	#make HTTP GET request to find matching entries
-	htr <- GET(searchBase,query=list(
-		db="clinvar",
-		term=paste0(gene,"[gene] AND single_gene[prop]"),
-		retmax=1000,
-		retmode="json"
-	))
-	if (http_status(htr)$category == "Success") {
-		#parse returned content as JSON
-		returnData <- fromJSON(content(htr,as="text",encoding="UTF-8"))
+		#This is a two-step process: First we have to query Clinvar for a list of matching
+		# DB entries. Then we can make a query for the details of the matched entries.
 
-		if (is.null(returnData) || length(returnData) < 1) {
-			stop("Server returned no data.")
+		searchBase <- "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+		summaryBase <- "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+
+		clinvarIds <- character()
+
+		if (stagger) {
+			#stick to slightly less than 3 queries per second
+			Sys.sleep(0.34)
 		}
 
-		if (as.numeric(returnData$esearchresult$count) > 1000) {
-			warning("More than 1000 results, excess skipped.")
+		if (!is.null(logger)) {
+			logger$info("Querying Clinvar for ",gene)
+		}
+		#make HTTP GET request to find matching entries
+		htr <- GET(searchBase,query=list(
+			db="clinvar",
+			term=paste0(gene,"[gene] AND single_gene[prop]"),
+			retmax=1000,
+			retmode="json"
+		))
+		if (http_status(htr)$category == "Success") {
+			#parse returned content as JSON
+			returnData <- fromJSON(content(htr,as="text",encoding="UTF-8"))
+
+			if (is.null(returnData) || length(returnData) < 1) {
+				stop("Server returned no data.")
+			}
+
+			if (as.numeric(returnData$esearchresult$count) > 1000) {
+				warning("More than 1000 results, excess skipped.")
+			}
+
+			#extract the list of matches
+			clinvarIds <- returnData$esearchresult$idlist
+
+		} else {
+			stop("server message: ",http_status(htr)$message)
 		}
 
-		#extract the list of matches
-		clinvarIds <- returnData$esearchresult$idlist
+		if (length(clinvarIds) < 1) {
+			stop("No results!")
+		}
+
+		if (stagger) {
+			#stick to slightly less than 3 queries per second
+			Sys.sleep(0.34)
+		}
+
+		if (!is.null(logger)) {
+			logger$info("Fetching detailed data from Clinvar")
+		}
+		#make HTTP get request for details of the matches
+		htr <- GET(summaryBase,query=list(
+			db="clinvar",
+			id=paste(clinvarIds,collapse=","),
+			retmode="json"
+		))
+		if (http_status(htr)$category == "Success") {
+			#parse JSON
+			returnData <- fromJSON(content(htr,as="text",encoding="UTF-8"))
+
+			if (is.null(returnData) || length(returnData) < 1) {
+				stop("Server returned no data.")
+			}
+
+			#the first result is simply a repetition of the entries, so we discard it.
+			#the rest are the actual details on the entries.
+			results <- as.df(lapply(returnData$result[-1], function(vset) {
+				#extract the variant description
+				varStr <- htmlDecode(vset$variation_set[[1]]$cdna_change)
+				#and the clinical significance statement
+				clinsig <- vset$clinical_significance[["description"]]
+				return(list(var=varStr,clinsig=clinsig))
+			}))
+
+		} else {
+			stop("server message: ",http_status(htr)$message)
+		}
+
+		#filter the results down to only missense variants
+		missense <- results[grepl("\\(p\\.\\w{3}\\d+\\w{3}\\)",results$var),]
+		missense <- missense[!grepl("\\(p\\.\\w{3}\\d+Ter\\)",missense$var),]
+		missense <- missense[!grepl("\\(p\\.\\w{3}\\d+\\w{3}fs\\)",missense$var),]
+		#extract the HGVS descriptors at the coding and protein levels.
+		missense$hgvsc <- extract.groups(missense$var,"(c\\.\\d+[ACGT]>[ACGT])")[,1]
+		missense$hgvsp <- extract.groups(missense$var,"(p\\.\\w{3}\\d+\\w{3})")[,1]
+
+		output <- missense[,c("hgvsc","hgvsp","clinsig")]
+
+		if (!is.null(logger)) {
+			logger$info("Caching Clinvar data for ",gene)
+		}
+		write.table(output,cacheFile,sep=",")
 
 	} else {
-		stop("server message: ",http_status(htr)$message)
-	}
-
-	if (length(clinvarIds) < 1) {
-		stop("No results!")
-	}
-
-
-	#make HTTP get request for details of the matches
-	htr <- GET(summaryBase,query=list(
-		db="clinvar",
-		id=paste(clinvarIds,collapse=","),
-		retmode="json"
-	))
-	if (http_status(htr)$category == "Success") {
-		#parse JSON
-		returnData <- fromJSON(content(htr,as="text",encoding="UTF-8"))
-
-		if (is.null(returnData) || length(returnData) < 1) {
-			stop("Server returned no data.")
+		if (!is.null(logger)) {
+			logger$info("Retrieving cached data for ",gene)
 		}
-
-		#the first result is simply a repetition of the entries, so we discard it.
-		#the rest are the actual details on the entries.
-		results <- as.df(lapply(returnData$result[-1], function(vset) {
-			#extract the variant description
-			varStr <- htmlDecode(vset$variation_set[[1]]$cdna_change)
-			#and the clinical significance statement
-			clinsig <- vset$clinical_significance[["description"]]
-			return(list(var=varStr,clinsig=clinsig))
-		}))
-
-	} else {
-		stop("server message: ",http_status(htr)$message)
+		output <- read.csv(cacheFile)
 	}
 
-	#filter the results down to only missense variants
-	missense <- results[grepl("\\(p\\.\\w{3}\\d+\\w{3}\\)",results$var),]
-	missense <- missense[!grepl("\\(p\\.\\w{3}\\d+Ter\\)",missense$var),]
-	missense <- missense[!grepl("\\(p\\.\\w{3}\\d+\\w{3}fs\\)",missense$var),]
-	#extract the HGVS descriptors at the coding and protein levels.
-	missense$hgvsc <- extract.groups(missense$var,"(c\\.\\d+[ACGT]>[ACGT])")[,1]
-	missense$hgvsp <- extract.groups(missense$var,"(p\\.\\w{3}\\d+\\w{3})")[,1]
-
-	return(missense[,c("hgvsc","hgvsp","clinsig")])
+	return(output)
 }
 
 
@@ -123,6 +209,8 @@ fetchClinvar <- function(gene) {
 #' and filters them down to missense variants.
 #' 
 #' @param ensemblID The Ensembl gene identifier (e.g. \code{ENSG00000198668})
+#' @param overrideCache logical determining whether local cache should be overridden
+#' @param logger a yogilogger object to write log messages to. Defaults to NULL
 #' @return a \code{data.frame} with the following columns:
 #' \itemize{
 #'   \item \code{hgvsc} The HGVS variant descriptor at the coding sequence (DNA) level
@@ -131,37 +219,63 @@ fetchClinvar <- function(gene) {
 #' }
 #' @export
 #' 
-fetchGnomad <- function(ensemblID) {
+fetchGnomad <- function(ensemblID,overrideCache=FALSE,logger=NULL) {
 
-	library(httr)
-	library(RJSONIO)
-	library(yogitools)
+	if (!is.null(logger)) {
+		stopifnot(inherits(logger,"yogilogger"))
+		library("yogilog")
+	}
 
-	exacURL <- "http://exac.hms.harvard.edu/rest/gene/variants_in_gene/"
+	cacheFile <- getCacheFile(paste0("gnomad_",ensemblID,".csv"))
 
-	#make HTTP GET request
-	htr <- GET(paste0(exacURL,ensemblID))
-	if (http_status(htr)$category == "Success") {
-		#parse JSON
-		returnData <- fromJSON(content(htr,as="text",encoding="UTF-8"))
+	if (!file.exists(cacheFile) || overrideCache) {
 
-		#filter down to only missense variants
-		missense.idx <- which(sapply(returnData,`[[`,"category")=="missense_variant")
+		library(httr)
+		library(RJSONIO)
+		library(yogitools)
 
-		missense.gnomad <- as.df(lapply(returnData[missense.idx],function(entry) {
-			#extract hgvs and allele frequency data
-			with(entry,list(
-				hgvc = HGVSc,
-				hgvsp = HGVSp,
-				maf = if (is.null(allele_freq)) NA else allele_freq,
-				hom = if (is.null(hom_count)) 0 else hom_count
-			))
-		}))
+		exacURL <- "http://exac.hms.harvard.edu/rest/gene/variants_in_gene/"
 
-		#the annotation of missense is in gnomad is not correct, so we have to filter again!
-		missense.gnomad <- missense.gnomad[grepl("^p\\.\\w{3}\\d+\\w{3}$",missense.gnomad$hgvsp),]
+		if (!is.null(logger)) {
+			logger$info("Querying GnomAD for ",ensemblID)
+		}
+		#make HTTP GET request
+		htr <- GET(paste0(exacURL,ensemblID))
+		if (http_status(htr)$category == "Success") {
+			#parse JSON
+			returnData <- fromJSON(content(htr,as="text",encoding="UTF-8"))
+
+			#filter down to only missense variants
+			missense.idx <- which(sapply(returnData,`[[`,"category")=="missense_variant")
+
+			missense.gnomad <- as.df(lapply(returnData[missense.idx],function(entry) {
+				#extract hgvs and allele frequency data
+				with(entry,list(
+					hgvc = HGVSc,
+					hgvsp = HGVSp,
+					maf = if (is.null(allele_freq)) NA else allele_freq,
+					hom = if (is.null(hom_count)) 0 else hom_count
+				))
+			}))
+
+			#the annotation of missense is in gnomad is not correct, so we have to filter again!
+			missense.gnomad <- missense.gnomad[grepl("^p\\.\\w{3}\\d+\\w{3}$",missense.gnomad$hgvsp),]
+		} else {
+			stop("server message: ",http_status(htr)$message)
+		}
+
+		#Write results to cache
+		if (!is.null(logger)) {
+			logger$info("Caching GnomAD data for ",ensemblID)
+		}
+		write.table(missense.gnomad,cacheFile,sep=",")
+
+
 	} else {
-		stop("server message: ",http_status(htr)$message)
+		if (!is.null(logger)) {
+			logger$info("Retrieving cached data for ",ensemblID)
+		}
+		missense.gnomad <- read.csv(cacheFile)
 	}
 
 	return(missense.gnomad)
@@ -177,12 +291,19 @@ calc.posterior <- function(llrs, prior) {
 	#transform prior to log odds
 	lpo <- log(prior/(1-prior))
 	#calculate log odds posterior
-	k <- sum(c(llrs,prior))
+	k <- sum(c(llrs,lpo))
 	#transform to probability
 	exp(k)/(1+exp(k))
 }
 
 
+#' Flip transformation
+#' 
+#' Applies the "flip" transformation to a numerical vector. I.e. all values 
+#' greater than one are transformed by 1/x
+#' 
+#' @param xs numerical vector
+#' @return the flipped scores as a numerical vector
 flipScores <- function(xs) sapply(xs,function(x) if (x > 1) 1/x else x)
 
 
@@ -193,21 +314,38 @@ flipScores <- function(xs) sapply(xs,function(x) if (x > 1) 1/x else x)
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param minMaf the minimum Minor Allele Frequency required for variants to be considered benign
+#' @param flip logical; whether to apply the flip transformation to the scores
+#' @param homozygous logical; filter benign variants to only those occuring homozygously.
+#' @param overrideCache logical; whether to override local cache.
+#' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
 #'   with an additional column \code{llr}, representing the log likelihood ratio
 #'   (i.e. log Bayes Factor)
 #' @export
 #' 
 goldStandardScores <- function(scores,ensembls,symbols,
-		drawPlot=TRUE,minMaf=0,flip=FALSE,homozygous=FALSE) {
+		drawPlot=TRUE,minMaf=0,flip=FALSE,homozygous=FALSE,
+		overrideCache=FALSE,logger=NULL) {
+
+	#FIXME: flip isn't actually implemented!
+
+	if (!is.null(logger)) {
+		stopifnot(inherits(logger,"yogilogger"))
+		library("yogilog")
+	}
 
 	library(hash)
 	library(yogitools)
 
 	score.idx <- hash(scores$hgvs_pro,scores$score)
 	
-	gnomad <- do.call(rbind,lapply(ensembls,fetchGnomad))
-	clinvar <- do.call(rbind,lapply(symbols,fetchClinvar))
+	gnomad <- do.call(rbind,lapply(ensembls,fetchGnomad,overrideCache=overrideCache,logger=logger))
+	clinvar <- do.call(rbind,lapply(symbols,fetchClinvar,overrideCache=overrideCache,logger=logger))
+
+	if(!is.null(logger)) {
+		logger$info("Building Gold Standard table")
+	}
 
 	gnomad <- gnomad[which(gnomad$maf > minMaf),]
 
@@ -263,6 +401,11 @@ goldStandardScores <- function(scores,ensembls,symbols,
 
 	#draw a summary plot if desired
 	if (drawPlot) {
+
+		if(!is.null(logger)) {
+			logger$info("Plotting score densities")
+		}
+
 		#Calculate distribution parameters
 		patho.m <- mean(patho.scores)
 		patho.sd <- sd(patho.scores)
@@ -295,39 +438,32 @@ goldStandardScores <- function(scores,ensembls,symbols,
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param overrideCache logical; whether to override local cache.
+#' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
 #'   with an additional column \code{llr}, representing the log likelihood ratio
 #'   (i.e. log Bayes Factor)
 #' @export
 #' 
-map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE) {
+map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
+			overrideCache=FALSE,logger=NULL) {
 
-	# library(hash)
+	if (!is.null(logger)) {
+		stopifnot(inherits(logger,"yogilogger"))
+		library("yogilog")
+	}
 
-	# score.idx <- hash(scores$hgvs_pro,scores$score)
-	
-	# gnomad <- do.call(rbind,lapply(ensembls,fetchGnomad))
-	# clinvar <- do.call(rbind,lapply(symbols,fetchClinvar))
+	#We use drawPlot=FALSE here, because we draw a better plot below if desired
+	summary.table <- goldStandardScores(scores,ensembls,symbols,
+		drawPlot=FALSE,minMaf=minMaf,flip=flip,
+		overrideCache=overrideCache,logger=logger
+	)
 
-	# #Define pathogenic variants as those in Clinvar annotated as Pathogenic or Likely pathogenic
-	# patho <- clinvar[grepl("athogenic",clinvar$clinsig),]
-	# patho <- patho[!grepl("Conflict",patho$clinsig),]
-	# patho.vars <- unique(patho$hgvsp)
+	if (!is.null(logger)) {
+		logger$info("Calculating Bayes Factors")
+	}
 
-	# #Define benign variants as those in Gnomad not labeled pathogenic in clinvar
-	# benign.vars <- setdiff(unique(gnomad$hgvsp),patho.vars)
-
-	# #Filter down to variants present in the map
-	# patho.vars <- patho.vars[has.key(patho.vars,score.idx)]
-	# benign.vars <- benign.vars[has.key(benign.vars,score.idx)]
-
-	# #Lookup the corresponding scores
-	# patho.scores <- values(score.idx,patho.vars)
-	# benign.scores <- values(score.idx,benign.vars)
-
-	summary.table <- goldStandardScores(scores,ensembls,symbols,FALSE)
-
-	#TODO: Apply test to check if distributinos are significantly different
+	#TODO: Apply test to check if distributions are significantly different
 
 	patho.scores <- with(summary.table,score[clinsig != "GnomAD"])
 	benign.scores <- with(summary.table,score[clinsig == "GnomAD"])
@@ -374,19 +510,48 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE) {
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param overrideCache logical; whether to override local cache.
+#' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
 #'   with an additional column \code{llr}, representing the log likelihood ratio
 #'   (i.e. log Bayes Factor)
 #' @export
+#' @examples
 #' 
-map2bf.mavedb <- function(ssid,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE) {
+#' maveUrn <- "urn:mavedb:00000001-c-2"
+#' ensembls <- c("ENSG00000198668","ENSG00000143933","ENSG00000160014")
+#' symbols <- c("CALM1","CALM2","CALM3")
+#' calmBFs <- map2bf.mavedb(maveUrn,ensembls,symbols)
+#' 
+map2bf.mavedb <- function(ssid,ensembls,symbols,
+			drawPlot=TRUE,minMaf=0,flip=FALSE,
+			overrideCache=FALSE,logger=NULL) {
 
-	library(rapimave)
-	mave <- new.rapimave()
+	if (!is.null(logger)) {
+		stopifnot(inherits(logger,"yogilogger"))
+		library("yogilog")
+	}
 
-	scores <- mave$getScores(ssid)
+	cacheFile <- getCacheFile(paste0(ssid,".csv"))
 
-	map2bf(scores,ensembls,symbols,minMaf,flip)
+	if (!file.exists(cacheFile) || overrideCache) {
+		library(rapimave)
+		mave <- new.rapimave()
+		if (!is.null(logger)) {
+			logger$info("Querying MaveDB for ",ssid)
+		}
+		scores <- mave$getScores(ssid)
+		write.table(scores,cacheFile,sep=",")
+	} else {
+		if (!is.null(logger)) {
+			logger$info("Retrieving MaveDB data from cache")
+		}
+		scores <- read.csv(cacheFile,stringsAsFactors=FALSE)
+	}
+
+	map2bf(scores,ensembls,symbols,minMaf=minMaf,flip=flip,
+		overrideCache=overrideCache,logger=logger
+	)
 }
 
 
@@ -397,12 +562,14 @@ map2bf.mavedb <- function(ssid,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALS
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param overrideCache logical; whether to override local cache.
+#' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
 #'   with an additional column \code{llr}, representing the log likelihood ratio
 #'   (i.e. log Bayes Factor)
 #' @export
-#' 
-map2bf.file <- function(csvfile,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE) {
+map2bf.file <- function(csvfile,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
+		overrideCache=FALSE,logger=NULL) {
 
 	scores <- read.csv(csvfile,stringsAsFactors=FALSE)
 
@@ -410,5 +577,7 @@ map2bf.file <- function(csvfile,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FAL
 		stop("File must contain at least columns 'hgvs_pro' and 'score'")
 	}
 
-	map2bf(scores,ensembls,symbols,minMaf,flip)
+	map2bf(scores,ensembls,symbols,minMaf=minMaf,flip=flip,
+		overrideCache=overrideCache,logger=logger
+	)
 }

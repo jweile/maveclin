@@ -4,10 +4,14 @@
 \alias{fetchGnomad}
 \title{Fetch missense variants in GnomAD for given gene}
 \usage{
-fetchGnomad(ensemblID)
+fetchGnomad(ensemblID, overrideCache = FALSE, logger = NULL)
 }
 \arguments{
 \item{ensemblID}{The Ensembl gene identifier (e.g. \code{ENSG00000198668})}
+
+\item{overrideCache}{logical determining whether local cache should be overridden}
+
+\item{logger}{a yogilogger object to write log messages to. Defaults to NULL}
 }
 \value{
 a \code{data.frame} with the following columns:

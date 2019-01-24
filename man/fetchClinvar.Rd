@@ -4,10 +4,18 @@
 \alias{fetchClinvar}
 \title{Fetch missense variants in ClinVar for given gene}
 \usage{
-fetchClinvar(gene)
+fetchClinvar(gene, stagger = TRUE, overrideCache = FALSE,
+  logger = NULL)
 }
 \arguments{
 \item{gene}{gene name as in ClinVar (e.g. 'CALM1')}
+
+\item{stagger}{logical determining whether HTTP requests should be staggered by
+a third of a second to avoid rejection by the server. Defaults to TRUE.}
+
+\item{overrideCache}{logical determining whether local cache should be overridden}
+
+\item{logger}{a yogilogger object to write log messages to. Defaults to NULL}
 }
 \value{
 a \code{data.frame} with the following columns:
