@@ -328,8 +328,6 @@ goldStandardScores <- function(scores,ensembls,symbols,
 		drawPlot=TRUE,minMaf=0,flip=FALSE,homozygous=FALSE,
 		overrideCache=FALSE,logger=NULL) {
 
-	#FIXME: flip isn't actually implemented!
-
 	if (!is.null(logger)) {
 		stopifnot(inherits(logger,"yogilogger"))
 		library("yogilog")
@@ -337,6 +335,10 @@ goldStandardScores <- function(scores,ensembls,symbols,
 
 	library(hash)
 	library(yogitools)
+
+	if (flip) {
+		scores$score <- flipScores(scores$score)
+	}
 
 	score.idx <- hash(scores$hgvs_pro,scores$score)
 	
@@ -375,29 +377,34 @@ goldStandardScores <- function(scores,ensembls,symbols,
 
 	#Make a summary table of the gold standard variants
 	summary.table <- rbind(
-		as.df(lapply(patho.vars,function(v) {
-			sig <- paste(with(clinvar,clinsig[which(hgvsp==v)]),collapse="|")
+		if (length(patho.vars) == 0) NULL else as.df(lapply(patho.vars,function(v) {
+			sig <- paste(unique(with(clinvar,clinsig[which(hgvsp==v)])),collapse="|")
 			maf <- if (v %in% gnomad$hgvsp) {
 				with(gnomad,maf[which(hgvsp==v)])
 			} else NA
 			hom <- if (v %in% gnomad$hgvsp) {
 				sum(with(gnomad,hom[which(hgvsp==v)]))
 			} else NA
-			list(hgvsp=v,clinsig=sig,maf=maf,hom=hom,score=patho.scores[[v]])
+			list(hgvsp=v,clinsig=sig,maf=maf,hom=hom,score=patho.scores[[v]],set="+")
 		})),
-		as.df(lapply(benign.vars,function(v) {
+		if (length(benign.vars) == 0) NULL else as.df(lapply(benign.vars,function(v) {
 			maf <- if (v %in% gnomad$hgvsp) {
 				with(gnomad,maf[which(hgvsp==v)])
 			} else NA
 			sig <- if (v %in% clinvar$hgvsp) {
-				paste(with(clinvar,clinsig[which(hgvsp==v)]),collapse="|")
+				paste(unique(with(clinvar,clinsig[which(hgvsp==v)])),collapse="|")
 			} else "GnomAD"
 			hom <- if (v %in% gnomad$hgvsp) {
 				sum(with(gnomad,hom[which(hgvsp==v)]))
 			} else NA
-			list(hgvsp=v,clinsig=sig,maf=maf,hom=hom,score=benign.scores[[v]])
+			list(hgvsp=v,clinsig=sig,maf=maf,hom=hom,score=benign.scores[[v]],set="-")
 		}))
 	)
+
+	if (length(patho.scores) == 0 || length(benign.scores) == 0) {
+		warning("Insufficient reference set!")
+		return(summary.table)
+	}
 
 	#draw a summary plot if desired
 	if (drawPlot) {
@@ -406,20 +413,20 @@ goldStandardScores <- function(scores,ensembls,symbols,
 			logger$info("Plotting score densities")
 		}
 
-		#Calculate distribution parameters
+		#Calculate distribution parameters and likelihood functions
 		patho.m <- mean(patho.scores)
 		patho.sd <- sd(patho.scores)
-		benign.m <- mean(benign.scores)
-		benign.sd <- sd(benign.scores)
-
-		#likelihood functions
 		dens.patho <- function(x) dnorm(x,patho.m,patho.sd)
+
+		benign.m <- mean(benign.scores)
+		benign.sd <- sd(benign.scores)		
 		dens.benign <- function(x) dnorm(x,benign.m,benign.sd)
 
 		xlim <- range(c(patho.scores,benign.scores))
+		ylim <- c(0,max(dens.patho(patho.m),dens.benign(benign.m)))
 		plot(
 			0,type="n",
-			xlim=xlim,ylim=c(0,max(dens.patho(patho.m),dens.benign(benign.m))),
+			xlim=xlim,ylim=ylim,
 			xlab="score",ylab="density"
 		)
 		abline(v=benign.scores,col="darkolivegreen3")
@@ -438,6 +445,9 @@ goldStandardScores <- function(scores,ensembls,symbols,
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param minMaf the minimum Minor Allele Frequency required for variants to be considered benign
+#' @param flip logical; whether to apply the flip transformation to the scores
+#' @param homozygous logical; filter benign variants to only those occuring homozygously.
 #' @param overrideCache logical; whether to override local cache.
 #' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
@@ -446,18 +456,26 @@ goldStandardScores <- function(scores,ensembls,symbols,
 #' @export
 #' 
 map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
-			overrideCache=FALSE,logger=NULL) {
+			homozygous=FALSE,overrideCache=FALSE,logger=NULL) {
 
 	if (!is.null(logger)) {
 		stopifnot(inherits(logger,"yogilogger"))
 		library("yogilog")
 	}
 
+	if (flip) {
+		scores$score <- flipScores(scores$score)
+	}
+
 	#We use drawPlot=FALSE here, because we draw a better plot below if desired
 	summary.table <- goldStandardScores(scores,ensembls,symbols,
-		drawPlot=FALSE,minMaf=minMaf,flip=flip,
+		drawPlot=FALSE,minMaf=minMaf,flip=flip,homozygous=homozygous,
 		overrideCache=overrideCache,logger=logger
 	)
+
+	if (length(unique(summary.table$set)) != 2) {
+		stop("Insufficient reference set!")
+	}
 
 	if (!is.null(logger)) {
 		logger$info("Calculating Bayes Factors")
@@ -465,8 +483,8 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 
 	#TODO: Apply test to check if distributions are significantly different
 
-	patho.scores <- with(summary.table,score[clinsig != "GnomAD"])
-	benign.scores <- with(summary.table,score[clinsig == "GnomAD"])
+	patho.scores <- with(summary.table,score[which(set == "+")])
+	benign.scores <- with(summary.table,score[which(set == "-")])
 
 	#Calculate distribution parameters
 	patho.m <- mean(patho.scores)
@@ -497,6 +515,13 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 	#calculate log likelihood ratio (log Bayes Factor) for each variant in the table
 	scores$llr <- sapply(scores$score,llr)
 
+	#calculate 90% confidence interval for LLR
+	ciVals <- cbind(
+		lower=sapply(with(scores,qnorm(p=0.95,mean=score,sd=se)),llr),
+		upper=sapply(with(scores,qnorm(p=0.05,mean=score,sd=se)),llr)
+	)
+	scores$llrCI <- apply(ciVals,1,function(vs)sprintf("[%.02f;%.02f]",vs[[1]],vs[[2]]))
+
 	#return the updated score table
 	return(scores)
 
@@ -510,6 +535,9 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param minMaf the minimum Minor Allele Frequency required for variants to be considered benign
+#' @param flip logical; whether to apply the flip transformation to the scores
+#' @param homozygous logical; filter benign variants to only those occuring homozygously.
 #' @param overrideCache logical; whether to override local cache.
 #' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
@@ -524,7 +552,7 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 #' calmBFs <- map2bf.mavedb(maveUrn,ensembls,symbols)
 #' 
 map2bf.mavedb <- function(ssid,ensembls,symbols,
-			drawPlot=TRUE,minMaf=0,flip=FALSE,
+			drawPlot=TRUE,minMaf=0,flip=FALSE,homozygous=FALSE,
 			overrideCache=FALSE,logger=NULL) {
 
 	if (!is.null(logger)) {
@@ -532,26 +560,53 @@ map2bf.mavedb <- function(ssid,ensembls,symbols,
 		library("yogilog")
 	}
 
-	cacheFile <- getCacheFile(paste0(ssid,".csv"))
+	nonstandardCall <- minMaf != 0 || flip || homozygous
 
-	if (!file.exists(cacheFile) || overrideCache) {
-		library(rapimave)
-		mave <- new.rapimave()
-		if (!is.null(logger)) {
-			logger$info("Querying MaveDB for ",ssid)
+	#FIXME: Should cache file name reflect gene names?
+	cacheFile <- getCacheFile(paste0("bayesFactors_",ssid,".csv"))
+
+	if (!file.exists(cacheFile) || overrideCache || nonstandardCall) {
+
+		scoreCacheFile <- getCacheFile(paste0(ssid,".csv"))
+
+		if (!file.exists(scoreCacheFile) || overrideCache) {
+
+			library(rapimave)
+			mave <- new.rapimave()
+			if (!is.null(logger)) {
+				logger$info("Querying MaveDB for ",ssid)
+			}
+			scores <- mave$getScores(ssid)
+			write.table(scores,scoreCacheFile,sep=",")
+
+		} else {
+
+			if (!is.null(logger)) {
+				logger$info("Retrieving cached scores for ",ssid)
+			}
+			scores <- read.csv(scoreCacheFile,stringsAsFactors=FALSE)
 		}
-		scores <- mave$getScores(ssid)
-		write.table(scores,cacheFile,sep=",")
+
+		out <- map2bf(scores,ensembls,symbols,minMaf=minMaf,flip=flip,
+			homozygous=homozygous,overrideCache=overrideCache,logger=logger
+		)
+
+		if (!is.null(logger)) {
+			logger$info("Caching Bayes Factor results")
+		}
+		if (!nonstandardCall) {
+			write.table(out,cacheFile,sep=",")
+		}
+
 	} else {
+
 		if (!is.null(logger)) {
-			logger$info("Retrieving MaveDB data from cache")
+			logger$info("Retrieving cached Bayes Factors for ",ssid)
 		}
-		scores <- read.csv(cacheFile,stringsAsFactors=FALSE)
+		out <- read.csv(cacheFile,stringsAsFactors=FALSE)
 	}
 
-	map2bf(scores,ensembls,symbols,minMaf=minMaf,flip=flip,
-		overrideCache=overrideCache,logger=logger
-	)
+	return(out)
 }
 
 
@@ -562,6 +617,9 @@ map2bf.mavedb <- function(ssid,ensembls,symbols,
 #' @param symbols a vector of gene symbols of the target gene
 #' @param drawPlot boolean value indicating whether a plot of variant distributions
 #'     should be drawn. Defaults to \code{TRUE}.
+#' @param minMaf the minimum Minor Allele Frequency required for variants to be considered benign
+#' @param flip logical; whether to apply the flip transformation to the scores
+#' @param homozygous logical; filter benign variants to only those occuring homozygously.
 #' @param overrideCache logical; whether to override local cache.
 #' @param logger a yogilogger object to which to write log messages.
 #' @return a \code{data.frame} containing the original \code{scores} input
@@ -569,7 +627,7 @@ map2bf.mavedb <- function(ssid,ensembls,symbols,
 #'   (i.e. log Bayes Factor)
 #' @export
 map2bf.file <- function(csvfile,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
-		overrideCache=FALSE,logger=NULL) {
+		homozygous=FALSE,overrideCache=FALSE,logger=NULL) {
 
 	scores <- read.csv(csvfile,stringsAsFactors=FALSE)
 
@@ -578,6 +636,6 @@ map2bf.file <- function(csvfile,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FAL
 	}
 
 	map2bf(scores,ensembls,symbols,minMaf=minMaf,flip=flip,
-		overrideCache=overrideCache,logger=logger
+		homozygous=homozygous,overrideCache=overrideCache,logger=logger
 	)
 }

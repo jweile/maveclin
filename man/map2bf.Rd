@@ -5,7 +5,8 @@
 \title{Calibrate a variant map to Bayes Factors}
 \usage{
 map2bf(scores, ensembls, symbols, drawPlot = TRUE, minMaf = 0,
-  flip = FALSE, overrideCache = FALSE, logger = NULL)
+  flip = FALSE, homozygous = FALSE, overrideCache = FALSE,
+  logger = NULL)
 }
 \arguments{
 \item{scores}{a dataframe with columns: hgvs_nt, hgvs_pro, score}
@@ -16,6 +17,12 @@ map2bf(scores, ensembls, symbols, drawPlot = TRUE, minMaf = 0,
 
 \item{drawPlot}{boolean value indicating whether a plot of variant distributions
 should be drawn. Defaults to \code{TRUE}.}
+
+\item{minMaf}{the minimum Minor Allele Frequency required for variants to be considered benign}
+
+\item{flip}{logical; whether to apply the flip transformation to the scores}
+
+\item{homozygous}{logical; filter benign variants to only those occuring homozygously.}
 
 \item{overrideCache}{logical; whether to override local cache.}
 
