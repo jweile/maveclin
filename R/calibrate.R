@@ -385,7 +385,7 @@ goldStandardScores <- function(scores,ensembls,symbols,
 			hom <- if (v %in% gnomad$hgvsp) {
 				sum(with(gnomad,hom[which(hgvsp==v)]))
 			} else NA
-			list(hgvsp=v,clinsig=sig,maf=maf,hom=hom,score=patho.scores[[v]],set="+")
+			list(hgvsp=v,clinsig=sig,maf=max(maf),hom=hom,score=patho.scores[[v]],set="+")
 		})),
 		if (length(benign.vars) == 0) NULL else as.df(lapply(benign.vars,function(v) {
 			maf <- if (v %in% gnomad$hgvsp) {
@@ -397,7 +397,7 @@ goldStandardScores <- function(scores,ensembls,symbols,
 			hom <- if (v %in% gnomad$hgvsp) {
 				sum(with(gnomad,hom[which(hgvsp==v)]))
 			} else NA
-			list(hgvsp=v,clinsig=sig,maf=maf,hom=hom,score=benign.scores[[v]],set="-")
+			list(hgvsp=v,clinsig=sig,maf=max(maf),hom=hom,score=benign.scores[[v]],set="-")
 		}))
 	)
 
@@ -463,10 +463,6 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 		library("yogilog")
 	}
 
-	if (flip) {
-		scores$score <- flipScores(scores$score)
-	}
-
 	#We use drawPlot=FALSE here, because we draw a better plot below if desired
 	summary.table <- goldStandardScores(scores,ensembls,symbols,
 		drawPlot=FALSE,minMaf=minMaf,flip=flip,homozygous=homozygous,
@@ -480,6 +476,16 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 	if (!is.null(logger)) {
 		logger$info("Calculating Bayes Factors")
 	}
+
+	if (flip) {
+		scores$flippedScore <- flipScores(scores$score)
+	}
+
+	rownames(summary.table) <- summary.table$hgvsp
+	scores$clinsig <- summary.table[scores$hgvs_pro,"clinsig"]
+	scores$maf <- summary.table[scores$hgvs_pro,"maf"]
+	scores$hom <- summary.table[scores$hgvs_pro,"hom"]
+	scores$set <- summary.table[scores$hgvs_pro,"set"]
 
 	#TODO: Apply test to check if distributions are significantly different
 
@@ -515,12 +521,13 @@ map2bf <- function(scores,ensembls,symbols,drawPlot=TRUE,minMaf=0,flip=FALSE,
 	#calculate log likelihood ratio (log Bayes Factor) for each variant in the table
 	scores$llr <- sapply(scores$score,llr)
 
+	#build confidence interval preferably on stderr, but if not available, use stdev
+	error <- with(scores, if (all(is.na(se))) sd else se)
+
 	#calculate 90% confidence interval for LLR
-	ciVals <- cbind(
-		lower=sapply(with(scores,qnorm(p=0.95,mean=score,sd=se)),llr),
-		upper=sapply(with(scores,qnorm(p=0.05,mean=score,sd=se)),llr)
-	)
-	scores$llrCI <- apply(ciVals,1,function(vs)sprintf("[%.02f;%.02f]",vs[[1]],vs[[2]]))
+	scores$llrCIleft=sapply(with(scores,qnorm(p=0.95,mean=score,sd=error)),llr)
+	scores$llrCIright=sapply(with(scores,qnorm(p=0.05,mean=score,sd=error)),llr)
+	# scores$llrCI <- apply(scores[,c("llrCIleft","llrCIright")],1,function(vs)sprintf("[%.02f;%.02f]",vs[[1]],vs[[2]]))
 
 	#return the updated score table
 	return(scores)

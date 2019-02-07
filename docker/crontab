@@ -1,0 +1,2 @@
+#execute sync.R every 5 minutes
+5 * * * * Rscript /setup/sync.R
