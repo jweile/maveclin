@@ -100,6 +100,8 @@ calibrate <- function(urn, persist, overrideCache=FALSE) {
 	)
 	invisible(dev.off())
 
+	logger$info("Updating database for",urn)
+
 	persist$calibrateScores(caliScores)
 
 	persist$setStatus(urn,"calibrated")

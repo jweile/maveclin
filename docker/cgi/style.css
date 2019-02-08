@@ -1,0 +1,241 @@
+/* 
+ * Copyright (C) 2018  Jochen Weile, Roth Lab
+ *
+ * This file is part of MaveVis.
+ *
+ * MaveVis is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * MaveVis is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with MaveVis.  If not, see <https://www.gnu.org/licenses/>.
+ */
+ 
+body {
+	/*min-width: 1000px;
+	max-width: 1200px;*/
+	font-family: LiberationSans, Arial, sans-serif;
+	padding: 20px 50px 50px 70px;
+	font-size: 10pt;
+	margin-bottom: 100px;
+	background: url(
+		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg\
+		AAAAUAAAAFCAYAAACNbyblAAAALklEQVQIW2P8DwQMSOD\
+		OnTsMjMiCIAEVFRWEIEwApAmsElkALHj79u3/IC3IAABt\
+		3x+GdGufqQAAAABJRU5ErkJggg=='
+	);
+}
+
+h1 {
+	font-family: FreeSans, Arial, sans-serif;
+	font-size: 24pt;
+}
+
+label.left {
+	width: 150px;
+	display: inline-block;
+	text-align: right;
+}
+
+.header {
+	margin-bottom: -30px;
+	margin-left: -50px;
+	font-style: italic;
+}
+
+.main {
+	width:100%;
+	display: flex;
+}
+
+.box {
+	padding:10px;
+	background-color:  #eff0f1;
+	border: 2px outset #dddddd;
+	box-shadow: 10px 10px 10px #aaaaaa;
+	margin-right: 20px;
+	margin-bottom: 30px;
+}
+
+.passepartoutImg {
+	/*text-align: center;*/
+	overflow: scroll;
+	border: 2px inset #dddddd;
+	height: calc(100% - 65px);
+	background: white;
+	margin: 10px;
+	padding: 10px;
+}
+
+.passepartoutCons {
+	/*text-align: center;*/
+	overflow: scroll;
+	border: 2px inset #dddddd;
+	height: calc(100% - 40px);
+	background: white;
+	margin: 10px;
+	padding: 10px;
+	background-color: #444444;
+}
+
+#controlpanel {
+	float: left;
+	width:350px;
+	min-width:350px;
+}
+
+#right {
+	width:100%;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+#outputpanel {
+	/*display: none;*/
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	text-align: center;
+	flex: 1;
+	min-height: 100px;
+	max-height: 600px;
+}
+
+#consolepanel {
+	height: 200px;
+}
+
+#console {
+	margin: 0;
+	font-size: 8pt;
+	color: white;
+	font-family: monospace;
+}
+
+textarea {
+  font-family: monospace;
+  padding:5px;
+  max-width:260px;
+}
+
+input[type=text] {
+	/*height:25px;*/
+	padding: 5px;
+	max-width: 180px;
+}
+
+details {
+	border: 1px dotted #aaaaaa;
+	padding: 10px;
+	margin-bottom:5px;
+	width:280px;
+	padding:10px;
+}
+summary {
+	cursor:pointer;
+}
+summary:hover{
+	text-decoration: underline;
+}
+
+details.faq {
+	border: none;
+	padding: 0px;
+	margin-bottom:5px;
+	width:100%;
+}
+summary.faqsum {
+	cursor:pointer;
+	font-weight:bold;
+	margin-top:10px;
+}
+
+input,textarea {
+	margin: 5px;
+}
+
+input[type=number]{
+    width: 40px;
+    padding: 5px;
+} 
+
+.buttonbar {
+	border-top: 1px solid gray;
+	text-align: right;
+	padding: 10px;
+}
+
+.ui-progressbar {
+	position: relative;
+}
+.progress-label {
+	position: absolute;
+	left: 30%;
+	top: 4px;
+	font-weight: bold;
+	text-shadow: 1px 1px 0 #fff;
+}
+
+#pdbProgressbar {
+	margin-top: 50px;
+	margin-bottom: 50px;
+}
+
+#vartable, #vartable td, #vartable th {
+	border: 1px solid lightgray;
+	padding: 3px;
+	border-collapse: collapse;
+}
+
+.helptable, .helptable tr, .helptable td, .helptable th {
+	text-align: left;
+	border: 1px solid lightgray;
+	padding: 3px;
+	border-collapse: collapse;
+}
+.footer { 
+	position: fixed;
+	padding: 10px;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+	color: gray;
+	background-color: rgba(255,255,255,0.8)
+}
+
+.blink {
+  animation: blinker 1s linear infinite;
+}
+
+.highlight {
+  animation: highlight 1s linear infinite;
+}
+
+.ui-autocomplete-loading {
+  background: white url("images/spinner_16x16.gif") right center no-repeat;
+}
+
+.ui-button-icon-only.splitbutton-select {
+	width: 1em;
+	max-width:1em;
+}
+
+@keyframes blinker {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes highlight {
+  50% {
+    box-shadow: 0 0 6px red;
+  }
+}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Atlas of Variant Effects</title>
+	<link rel="stylesheet" href="style.css" type="text/css"/>
+	<link rel="stylesheet" href="jquery-ui.min.css" >
+	<script src="jquery-3.3.1.min.js"></script>
+	<script src="jquery-ui.min.js"></script>
+	<!--<script src="maveclin.js"></script>-->
+</head>
+
+<body>
+
+	<p class="header">
+		<img src="images/logo2.png" alt="Atlas of Variant Effects" width="300px">
+	</p>
+
+	<div class="box widget" id="controlpanel">
+		<h3>%symbol</h3>
+		<p>MaveDB accession: %urn</p>
+		<p>Ensembl Gene ID: %ensemblGeneID</p>
+		<p>Last updated: %lastUpdated</p>
+
+		<h4>Calibration parameters:</h4>
+		<form>
+		<p>
+			<label class="left" for="flip">Flip MAVE scores</label>
+			<input id="flip" class="ui-corner-all" type="checkbox" value="%flip"/>
+		</p>
+		<p>
+			<label class="left" for="mafCutoff">Benign: MAF cutoff</label>
+			<input id="mafCutoff" class="ui-corner-all" type="number" value="%mafCutoff" step="0.01" min="0" max="1"/>
+		</p>
+		<p>
+			<label class="left" for="homozygous">Benign: only homozygous</label>
+			<input id="homozygous" class="ui-corner-all" type="checkbox" value="%homozygous"/>
+		</p>
+		<div class="buttonbar">
+			<button id="submitButton">Calibrate</button>
+		</div>
+		</form>
+	</div>
+
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Atlas of Variant Effects</title>
+	<link rel="stylesheet" href="style.css" type="text/css"/>
+	<link rel="stylesheet" href="jquery-ui.min.css" >
+	<script src="jquery-3.3.1.min.js"></script>
+	<script src="jquery-ui.min.js"></script>
+	<!--<script src="maveclin.js"></script>-->
+</head>
+
+<body>
+
+	<p class="header">
+		<img src="images/logo2.png" alt="Atlas of Variant Effects" width="300px">
+	</p>
+
+	<div class="box">
+		<h3>%symbol %hgvs_pro</h3>
+		<p>MaveDB accession: %accession</p>
+		<p>Allele frequency: %maf</p>
+		<p>Clinical significance: %clinsig</p>
+		<p>Log<sub>2</sub> Likelihood Ratio: %llr ; CI: %ci</p>
+		<p>Posterior probability of pathogenicity: <span id="posterior"> %posterior </span></p>
+	</div>
+
+</body>
+</html>

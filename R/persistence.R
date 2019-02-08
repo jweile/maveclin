@@ -63,6 +63,8 @@ new.persistence.connection <- function(dbfile) {
 
 	#Scoreset URN validation regex
 	urnRX <- "^urn:mavedb:\\d{8}-\\w{1}-\\d+$"
+	#variant accession validation regex
+	accRX <- "^urn:mavedb:\\d{8}-\\w{1}-\\d+#\\d+$"
 
 	#checks whether dataset is known to database
 	isKnown <- function(urn) {
@@ -137,6 +139,27 @@ new.persistence.connection <- function(dbfile) {
 			sqlInterpolate(.con,
 				"SELECT symbol, ensemblGeneID, mafCutoff, flip, homozygous 
 				FROM scoresets WHERE urn = ?urn;",
+				urn=urn
+			)
+		)
+		if (nrow(res) != 1) {
+			stop("Unknown URN ",urn)
+		}
+		out <- res[1,,drop=TRUE]
+		out$symbol <- strsplit(out$symbol,"\\|")[[1]]
+		out$ensemblGeneID <- strsplit(out$ensemblGeneID,"\\|")[[1]]
+		return(out)
+	}
+
+
+	#get the parameters for the scoreset
+	getScoreset <- function(urn) {
+		stopifnot(
+			grepl(urnRX,urn)
+		)
+		res <- dbGetQuery(.con,
+			sqlInterpolate(.con,
+				"SELECT * FROM scoresets WHERE urn = ?urn;",
 				urn=urn
 			)
 		)
@@ -228,11 +251,44 @@ new.persistence.connection <- function(dbfile) {
 		)
 		res <- dbGetQuery(.con,
 			sqlInterpolate(.con,
-				"SELECT * from variants WHERE scoreset = ?urn",
+				"SELECT * FROM variants WHERE scoreset = ?urn",
 				urn=urn
 			)
 		)
 		return(res)
+	}
+
+	#checks whether a variant with the given accession exists
+	hasVariant <- function(acc) {
+		stopifnot(
+			grepl(accRX,acc)
+		)
+		res <- dbGetQuery(.con,
+			sqlInterpolate(.con,
+				"SELECT COUNT(*) FROM variants WHERE accession = ?acc",
+				acc=acc
+			)
+		)
+		return(res[,1] > 0)
+	}
+
+	getVariantDetail <- function(acc) {
+		stopifnot(
+			grepl(accRX,acc)
+		)
+		res <- dbGetQuery(.con,
+			sqlInterpolate(.con,
+		 		"SELECT * FROM 
+		 		variants INNER JOIN scoresets 
+		 		ON variants.scoreset = scoresets.urn 
+		 		AND variants.accession = ?acc;",
+		 		acc=acc
+			)
+		)
+		if (nrow(res) != 1) {
+			stop("Unknown accession ",acc)
+		}
+		return(res[1,,drop=TRUE])
 	}
 
 	#applies the given calibrated scores to the variants in the database
@@ -276,9 +332,12 @@ new.persistence.connection <- function(dbfile) {
 		getDate=getDate,
 		setStatus=setStatus,
 		getParameters=getParameters,
+		getScoreset=getScoreset,
 		newScoreset=newScoreset,
 		newVariants=newVariants,
 		getVariants=getVariants,
+		hasVariant=hasVariant,
+		getVariantDetail=getVariantDetail,
 		calibrateScores=calibrateScores,
 		close=close
 	),class="persistence.connection")

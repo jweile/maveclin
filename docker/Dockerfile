@@ -59,7 +59,7 @@ RUN Rscript installDependencies.R ${UPDATE_RPKG}
 
 
 # Create maveclin's directory structure and grant access to apache
-RUN mkdir -p /var/www/maveclin/httpdocs &&\
+RUN mkdir -p /var/www/html/maveclin/httpdocs &&\
     mkdir -p /var/www/maveclin/logs &&\
     chmod 777 /var/www/maveclin/logs &&\
     mkdir -p /var/www/maveclin/cache/ &&\
