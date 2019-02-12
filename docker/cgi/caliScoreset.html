@@ -7,7 +7,8 @@
 	<link rel="stylesheet" href="jquery-ui.min.css" >
 	<script src="jquery-3.3.1.min.js"></script>
 	<script src="jquery-ui.min.js"></script>
-	<!--<script src="maveclin.js"></script>-->
+	<script src="scoresetPage.js"></script>
+	<script src="disclaimer.js"></script>
 </head>
 
 <body>
@@ -25,7 +26,6 @@
 				<p>Last updated: %lastUpdated</p>
 
 				<h4>Calibration parameters:</h4>
-				<form>
 				<p>
 					<label class="left" for="flip">Flip MAVE scores</label>
 					<input id="flip" class="ui-corner-all" type="checkbox" value="%flip"/>
@@ -39,9 +39,8 @@
 					<input id="homozygous" class="ui-corner-all" type="checkbox" value="%homozygous"/>
 				</p>
 				<div class="buttonbar">
-					<button id="submitButton">Calibrate</button>
+					<button id="calibrateButton">Calibrate</button>
 				</div>
-				</form>
 			</div>
 			<div class="box widget">
 				<img src="/%imgTarget" width="300px;">
@@ -51,6 +50,12 @@
 				<h3>Gold Standard Variants</h3>
 			%varTable
 		</div>
+	</div>
+
+	<div id="disclaimerDialog" title="Disclaimer"></div>
+
+	<div class="footer">
+		Copyright &copy; 2019 Jochen Weile, <a href="https://www.gnu.org/licenses/agpl-3.0.en.html">AGPLv3.0</a> &nbsp; This project is Free and Open Source. Check it out <a href="https://github.com/VariantEffect/maveclin">Github</a> and <a href="https://hub.docker.com/r/jweile/maveclin/">Docker Hub</a>. You agree to the <a id="disclaimerLink" href="#">disclaimer</a>.
 	</div>
 
 </body>
