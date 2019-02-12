@@ -51,6 +51,9 @@ options(
 cache.dir <- Sys.getenv("MAVECLIN_CACHE",unset="/var/www/maveclin/cache/")
 templ.dir <- "/var/www/html/maveclin/httpdocs/"
 
+#turns an identifier into a hyperlink
+linkify <- function(x) paste0("<a href=\"index.R?q=",URLencode(x,reserved=TRUE),"\">",x,"</a>")
+
 #turns a dataframe into an html table
 df2html <- function(df) {
 	stopifnot(inherits(df,"data.frame"))
@@ -68,7 +71,11 @@ scoresetPage <- function(urn, persist) {
 	if (setDetail$status == "calibrated") {
 
 		vars <- persist$getVariants(urn)
+		#remove variants that are not part of a reference set (and drop the scoreset reference)
 		vars <- vars[!is.na(vars$refset),-2]
+		#linkify the accessions
+		vars$accession <- sapply(vars$accession,linkify)
+		#turn to HTML table
 		varHtml <- df2html(format(vars,digits=2))
 
 		imgName <- paste0(urn,"_calibration.png")
@@ -111,8 +118,6 @@ variantPage <- function(acc, persist) {
 
 searchResultPage <- function(query, persist) {
 	
-	linkify <- function(x) paste0("<a href=\"index.R?q=",URLencode(x,reserved=TRUE),"\">",x,"</a>")
-
 	scoresets <- persist$searchScoresets(query)
 	scoresets$urn <- sapply(scoresets$urn,linkify)
 	variants <- persist$searchVariants(query)
