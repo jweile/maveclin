@@ -97,21 +97,31 @@ variantPage <- function(acc, persist) {
 			x
 		}
 	})
-	varDetail$ci <- with(varDetail,sprintf("[ %.2f ; %.2f ]",llrCIleft/log(2),llrCIright/log(2)))
-	varDetail$posterior <- with(varDetail,sprintf(
-		"%.2f CI: [ %.2f ; %.2f ]",
-		lo2post(llr),lo2post(llrCIleft),lo2post(llrCIright)
-	))
-	varDetail$llr <- sprintf("%.2f",varDetail$llr/log(2))
+	# varDetail$ci <- with(varDetail,sprintf("[ %.2f ; %.2f ]",llrCIleft/log(2),llrCIright/log(2)))
+	varDetail$ciLeft <- varDetail$llrCIleft
+	varDetail$ciRight <- varDetail$llrCIright
+	# varDetail$posterior <- with(varDetail,sprintf(
+	# 	"%.2f CI: [ %.2f ; %.2f ]",
+	# 	lo2post(llr),lo2post(llrCIleft),lo2post(llrCIright)
+	# ))
+	# varDetail$llr <- sprintf("%.2f",varDetail$llr/log(2))
 
 	respondTemplateHTML(paste0(templ.dir,"variant.html"),varDetail)	
 }
 
-searchResultPage <- function(acc, persist) {
+searchResultPage <- function(query, persist) {
+	
+	linkify <- function(x) paste0("<a href=\"index.R?q=",URLencode(x,reserved=TRUE),"\">",x,"</a>")
 
-	detail <- list()
+	scoresets <- persist$searchScoresets(query)
+	scoresets$urn <- sapply(scoresets$urn,linkify)
+	variants <- persist$searchVariants(query)
+	variants$accession <- sapply(variants$accession,linkify)
+	ssTable <- if (nrow(scoresets) > 0) paste("<h4>Scoresets</h4>",df2html(scoresets)) else ""
+	varTable <- if (nrow(variants) > 0) paste("<h4>Variants</h4>",df2html(variants)) else ""
+	results <- paste(ssTable,varTable)
 
-	respondTemplateHTML(paste0(templ.dir,"searchResult.html"),detail)
+	respondTemplateHTML(paste0(templ.dir,"searchResult.html"),list(results=results))
 }
 
 
