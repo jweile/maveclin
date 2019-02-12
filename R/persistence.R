@@ -320,6 +320,18 @@ new.persistence.connection <- function(dbfile) {
 
 	}
 
+	searchScoresets <- function(query) {
+		scoresets <- dbGetQuery(.con,"SELECT urn, symbol, ensemblGeneID FROM scoresets;")
+		hits <- apply(apply(scoresets,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
+		return(scoresets[hits,])
+	}
+
+	searchVariants <- function(query) {
+		variants <- dbGetQuery(.con,"SELECT accession, hgvs_pro, clinsig FROM variants;")
+		hits <- apply(apply(variants,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
+		return(variants[hits,])
+	}
+
 	#close the db connection
 	close <- function() {
 		dbDisconnect(.con)
@@ -339,6 +351,8 @@ new.persistence.connection <- function(dbfile) {
 		hasVariant=hasVariant,
 		getVariantDetail=getVariantDetail,
 		calibrateScores=calibrateScores,
+		searchScoresets=searchScoresets,
+		searchVariants=searchVariants,
 		close=close
 	),class="persistence.connection")
 
