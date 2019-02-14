@@ -65,6 +65,10 @@ new.persistence.connection <- function(dbfile) {
 	urnRX <- "^urn:mavedb:\\d{8}-\\w{1}-\\d+$"
 	#variant accession validation regex
 	accRX <- "^urn:mavedb:\\d{8}-\\w{1}-\\d+#\\d+$"
+	#HGNC gene symbol validation regex
+	symbolRX <- "^[A-Z0-9-]+$|^C[0-9XY]+orf[0-9]+$"
+	#Ensembl Gene ID regex
+	ensemblRX <- "^ENS[A-Z]+[0-9]{11}|[A-Z]{3}[0-9]{3}[A-Za-z](-[A-Za-z])?|CG[0-9]+|[A-Z0-9]+\\.[0-9]+|YM[A-Z][0-9]{3}[a-z][0-9]$"
 
 	#checks whether dataset is known to database
 	isKnown <- function(urn) {
@@ -118,7 +122,7 @@ new.persistence.connection <- function(dbfile) {
 	setStatus <- function(urn,status) {
 		stopifnot(
 			grepl(urnRX,urn),
-			status %in% c("new","configured","calibrated")
+			status %in% c("new","pending","processing","calibrated","error")
 		) 
 		res <- dbSendStatement(.con,
 			sqlInterpolate(.con,
@@ -148,7 +152,54 @@ new.persistence.connection <- function(dbfile) {
 		out <- res[1,,drop=TRUE]
 		out$symbol <- strsplit(out$symbol,"\\|")[[1]]
 		out$ensemblGeneID <- strsplit(out$ensemblGeneID,"\\|")[[1]]
+		out$flip <- as.logical(out$flip)
+		out$homozygous <- as.logical(out$homozygous)
 		return(out)
+	}
+
+	#change the parameters for a given scoreset and set its state to "pending"
+	setParameters <- function(urn,symbol,ensemblGeneID,mafCutoff,flip,homozygous) {
+		#assert that all parameters are valid
+		stopifnot(
+			#urn must be valid URN
+			length(urn) == 1, grepl(urnRX,urn),
+			#symbol must be valid gene symbols
+			length(symbol) > 0, grepl(symbolRX,symbol),
+			#ensembl must be valid ensembl gene ids
+			length(ensemblGeneID) > 0, grepl(ensemblRX,ensemblGeneID),
+			#mafCutoff must be numeric
+			length(mafCutoff) == 1, inherits(mafCutoff,"numeric"), !is.na(mafCutoff),
+			#flip must be a boolean value
+			length(flip) == 1, inherits(flip,"logical"), !is.na(flip),
+			#homozygous must be a boolean value
+			length(homozygous) == 1, inherits(homozygous,"logical"), !is.na(homozygous)
+		) 
+		if (length(symbol) > 1) {
+			symbol <- paste(symbol,collapse="|")
+		}
+		if (length(ensemblGeneID) > 1) {
+			ensemblGeneID <- paste(ensemblGeneID,collapse="|")
+		}
+		res <- dbSendStatement(.con,
+			"UPDATE scoresets 
+			SET symbol = $symbol, 
+			ensemblGeneID = $ensemblGeneID,
+			mafCutoff = $mafCutoff,
+			flip = $flip,
+			status = 'pending'
+			WHERE urn = $urn;"
+		)
+		dbBind(res,list(
+			symbol=symbol,
+			ensemblGeneID=ensemblGeneID,
+			mafCutoff=mafCutoff,
+			flip=flip,
+			urn=urn
+		))
+		if (dbGetRowsAffected(res) != 1) {
+			stop("DB Update failed!")
+		}
+		dbClearResult(res)
 	}
 
 
@@ -175,9 +226,21 @@ new.persistence.connection <- function(dbfile) {
 	#add a new scoreset 
 	newScoreset <- function(urn,symbols,ensembl) {
 		stopifnot(
-			grepl(urnRX,urn)
-			#TODO: validate symbols and ensembl
+			#urn must be a valid URN
+			length(urn) == 1, grepl(urnRX,urn),
+			#must provide same number of gene symbols and ensembl IDs
+			length(symbols) == length(ensembl),
+			#symbols must either be NA or valid gene symbols
+			length(symbols) > 0, all(is.na(symbols)) || grepl(symbolRX,symbols),
+			#ensembl must either be NA or valid ensembl gene IDs
+			length(ensembl) > 0, all(is.na(ensembl)) || grepl(ensemblRX,ensembl)
 		)
+		if (length(symbols) > 1) {
+			symbols <- paste(symbols,collapse="|")
+		}
+		if (length(ensembl) > 1) {
+			ensembl <- paste(ensembl,collapse="|")
+		}
 		res <- dbSendStatement(.con,
 			sqlInterpolate(.con,
 				"INSERT INTO scoresets 
@@ -332,6 +395,11 @@ new.persistence.connection <- function(dbfile) {
 		return(variants[hits,])
 	}
 
+	getPending <- function() {
+		scoresets <- dbGetQuery(.con,"SELECT urn FROM scoresets WHERE status='pending';")
+		return(scoresets[,1])
+	}
+
 	#close the db connection
 	close <- function() {
 		dbDisconnect(.con)
@@ -344,6 +412,7 @@ new.persistence.connection <- function(dbfile) {
 		getDate=getDate,
 		setStatus=setStatus,
 		getParameters=getParameters,
+		setParameters=setParameters,
 		getScoreset=getScoreset,
 		newScoreset=newScoreset,
 		newVariants=newVariants,
@@ -353,6 +422,7 @@ new.persistence.connection <- function(dbfile) {
 		calibrateScores=calibrateScores,
 		searchScoresets=searchScoresets,
 		searchVariants=searchVariants,
+		getPending=getPending,
 		close=close
 	),class="persistence.connection")
 
