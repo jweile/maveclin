@@ -57,16 +57,26 @@ if (!c("urn","symbol","ensemblGeneID","mafCutoff","flip","homozygous") %in% name
 	respond400("Missing parameter(s)!")
 }
 
+urn <- inputPOST$urn
+
 persist <- new.persistence.connection(paste0(cache.dir,"maveclin.db"))
 
-
-persist$setParameters(
-	urn=urn,
-	symbol=inputPOST$symbol,
-	ensemblGeneID=inputPOST$ensemblGeneID,
-	mafCutoff=as.numeric(inputPOST$mafCutoff),
-	flip=as.logical(inputPOST$flip),
-	homozygous=is.logical(inputPOST$homozygous)
-)
-
-respondText("Submitted")
+if (!persist$isKnown(urn)) {
+	respond400(paste("Unknown URN",urn))
+} else if (persist$getStatus(urn) %in% c("pending","processing")) {
+	respondJSON(list(response="busy"))
+} else {
+	tryCatch({
+		with(inputPOST,persist$setParameters(
+			urn=urn,
+			symbol=symbol,
+			ensemblGeneID=ensemblGeneID,
+			mafCutoff=as.numeric(mafCutoff),
+			flip=as.logical(flip),
+			homozygous=is.logical(homozygous)
+		))
+		respondJSON(list(response="submitted"))
+	},error=function(err) {
+		respond400(err)
+	})
+}
