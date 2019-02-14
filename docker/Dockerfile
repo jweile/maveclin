@@ -98,7 +98,7 @@ RUN a2dissite 000-default.conf && a2ensite maveclin
 
 #setup startup script and daemon
 # COPY startup.sh daemon.R sync.R /setup/
-COPY startup.sh sync.R dbInit.sql /setup/
+COPY startup.sh sync.R calibrationCron.R dbInit.sql /setup/
 
 #run db init script
 RUN sqlite3 $MAVECLIN_CACHE/maveclin.db < dbInit.sql
@@ -106,7 +106,8 @@ RUN sqlite3 $MAVECLIN_CACHE/maveclin.db < dbInit.sql
 #setup cronjob for synchronization script
 ADD crontab /etc/cron.d/maveclin-cron
 RUN chmod 0644 /etc/cron.d/maveclin-cron && \
-    crontab /etc/cron.d/maveclin-cron
+    crontab /etc/cron.d/maveclin-cron && \
+    chmod a+x /setup/sync.R
 
 #startup script starts apache and daemon
 CMD bash /setup/startup.sh

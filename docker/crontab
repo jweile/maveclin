@@ -1,2 +1,3 @@
 #execute sync.R every 5 minutes
-5 * * * * Rscript /setup/sync.R
+*/5 * * * * Rscript /setup/sync.R >> /var/www/maveclin/logs/cron.log 2>&1
+*/1 * * * * Rscript /setup/calibrationCron.R >> /var/www/maveclin/logs/cron.log 2>&1

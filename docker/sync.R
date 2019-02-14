@@ -68,7 +68,7 @@ enterNewScoreset <- function(scoreset, persist, rmave) {
 	#load scores from MaveDB
 	scores <- rmave$getScores(urn)
 
-	#check that it's usable
+	#if it's not usable, skip it
 	if (all(scores$hgvs_pro == "None")) {
 		logger$info("Skipping noncoding dataset ",urn)
 		return()
@@ -79,35 +79,6 @@ enterNewScoreset <- function(scoreset, persist, rmave) {
 	persist$newVariants(urn,scores)
 
 }
-
-#Performs score calibration on a given dataset
-calibrate <- function(urn, persist, overrideCache=FALSE) {
-
-	logger$info("Running calibration for ",urn)
-
-	params <- persist$getParameters(urn)
-	scores <- persist$getVariants(urn)
-
-	pngFile <- getCacheFile(paste0(urn,"_calibration.png"))
-	dpi <- 100
-	png(pngFile,7*dpi,5*dpi,res=dpi)
-
-	caliScores <- map2bf(scores,
-		ensembls=params$ensemblGeneID,symbols=params$symbol,
-		minMaf=params$mafCutoff,flip=as.logical(params$flip),
-		homozygous=as.logical(params$homozygous),
-		drawPlot=TRUE,logger=logger
-	)
-	invisible(dev.off())
-
-	logger$info("Updating database for",urn)
-
-	persist$calibrateScores(caliScores)
-
-	persist$setStatus(urn,"calibrated")
-
-}
-
 
 
 #Open API connection
@@ -125,28 +96,30 @@ invisible(lapply(scoresets,function(scoreset) {
 
 	urn <- scoreset$getURN()
 
-	if (persist$isKnown(urn)) {
-		switch(persist$getStatus(urn),
-			#"new" means fresh from MaveDB, not yet configured
-			new={
-				#can't do anything yet until curator provides parameters
-				logger$info(urn," still waiting for curation.")
-			},
-			#"configured" means the curator has provided parameters and it's ready for calibration
-			configured={
-				calibrate(urn, persist)
-			},
-			#"calibrated" means its ready to be used, but may need to be updated 
-			calibrated={
-				ageInDays <- difftime(Sys.time(),persist$getDate(urn),units="days")
-				if (ageInDays > 7) {
-					calibrate(urn, persist, overrideCache=TRUE)
-				}
-			}
-		)
-	} else {#it's unknown, so it'll need to be cached and tagged as "new"
-
+	if (!persist$isKnown(urn)) {
+		#it's unknown, so it'll need to be cached and tagged as "new"
 		enterNewScoreset(scoreset,persist,rmave)
+
+	} else {
+
+		# switch(persist$getStatus(urn),
+		# 	#"new" means fresh from MaveDB, not yet configured
+		# 	new={
+		# 		#can't do anything yet until curator provides parameters
+		# 		logger$info(urn," still waiting for curation.")
+		# 	},
+		# 	#"configured" means the curator has provided parameters and it's ready for calibration
+		# 	configured={
+		# 		calibrate(urn, persist)
+		# 	},
+		# 	#"calibrated" means its ready to be used, but may need to be updated 
+		# 	calibrated={
+		# 		ageInDays <- difftime(Sys.time(),persist$getDate(urn),units="days")
+		# 		if (ageInDays > 7) {
+		# 			calibrate(urn, persist, overrideCache=TRUE)
+		# 		}
+		# 	}
+		# )
 		
 	}
 
