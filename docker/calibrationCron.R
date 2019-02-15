@@ -33,20 +33,26 @@ library(yogilog)
 library(maveclin)
 
 #Set up logger
-# logfile <- getCacheFile("sync.log")
 logfile <- paste0(Sys.getenv("MAVECLIN_LOGS",unset="/var/www/maveclin/logs/"),"calibrationCron.log")
 logger <- new.logger(logfile)
 #Make sure any fatal errors will be logged before the script dies.
 registerLogErrorHandler(logger)
 
-# Before proceeding any further, check if the previous sync is still running
+
+# Before proceeding any further, check if the previous job is still running
 disable <- FALSE
-njobs <- as.numeric(system("ps -eo command|grep calibrationCron.R|grep -cv grep",intern=TRUE))
+#When executed from cron, the script name shows up in both the /bin/sh shell wrapper and R processes!
+# 2019-02-15_15:46:01 INFO: /bin/sh -c Rscript /setup/calibrationCron.R >> /var/www/maveclin/logs/cron.log 2>&1 
+# 2019-02-15_15:46:01 INFO: /usr/lib/R/bin/exec/R --slave --no-restore --file=/setup/calibrationCron.R 
+jobRX <- "'R --slave.*calibrationCron.R'"
+njobs <- as.numeric(system(paste0("ps -eo command|grep ",jobRX,"|grep -cv grep"),intern=TRUE))
 if (disable) {
 	logger$info("calibration cancelled.")
 	quit(save="no",status=0)
 } else if (njobs > 1) {
 	logger$info("Concurrent calibration detected. Aborting duplicate process.")
+	detail <- system(paste0("ps -eo command|grep ",jobRX,"|grep -v grep"),intern=TRUE)
+	logger$info(detail)
 	quit(save="no",status=0)
 }
 
@@ -56,32 +62,43 @@ calibrate <- function(urn, persist, overrideCache=FALSE) {
 
 	logger$info("Running calibration for ",urn)
 
-	params <- persist$getParameters(urn)
-	scores <- persist$getVariants(urn)
+	tryCatch({
+		persist$setStatus(urn,"processing")
 
-	pngFile <- getCacheFile(paste0(urn,"_calibration.png"))
-	dpi <- 100
-	png(pngFile,7*dpi,5*dpi,res=dpi)
+		params <- persist$getParameters(urn)
+		scores <- persist$getVariants(urn)
 
-	caliScores <- map2bf(scores,
-		ensembls=params$ensemblGeneID,symbols=params$symbol,
-		minMaf=params$mafCutoff,flip=as.logical(params$flip),
-		homozygous=as.logical(params$homozygous),
-		drawPlot=TRUE,logger=logger
-	)
-	invisible(dev.off())
+		pngFile <- getCacheFile(paste0(urn,"_calibration.png"))
+		dpi <- 100
+		png(pngFile,7*dpi,5*dpi,res=dpi)
 
-	logger$info("Updating database for",urn)
+		caliScores <- map2bf(scores,
+			ensembls=params$ensemblGeneID,symbols=params$symbol,
+			minMaf=params$mafCutoff,flip=as.logical(params$flip),
+			homozygous=as.logical(params$homozygous),
+			drawPlot=TRUE,logger=logger
+		)
+		invisible(dev.off())
 
-	persist$calibrateScores(caliScores)
+		logger$info("Updating database for",urn)
 
-	persist$setStatus(urn,"calibrated")
+		persist$calibrateScores(caliScores)
+
+		persist$setStatus(urn,"calibrated")
+
+	},error=function(err) {
+		logger$error("while calibrating dataset",urn,":\n",err)
+		persist$setStatus(urn,"error")
+	})
 
 }
 
 
 #Open Persistence connection
-dbfile <- getCacheFile("maveclin.db")
+#FIXME: CRON is stupid and cannot see environment variables. Hence the hardcoding >:(
+# dbfile <- getCacheFile("maveclin.db")
+dbfile <- "/var/www/maveclin/cache/maveclin.db"
+logger$info("Connecting to database",dbfile)
 persist <- new.persistence.connection(dbfile)
 
 pendingURNs <- persist$getPending()

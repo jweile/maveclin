@@ -54,8 +54,8 @@ templ.dir <- "/var/www/html/maveclin/httpdocs/"
 
 inputPOST <- readPOST()
 
-if (!c("urn","symbol","ensemblGeneID","mafCutoff","flip","homozygous") %in% names(inputPOST)) {
-	respond400("Missing parameter(s)!")
+if (!c("urn") %in% names(inputPOST)) {
+	respond400("Missing parameter: urn")
 	quit(save="no",status=0)
 }
 
@@ -66,31 +66,7 @@ persist <- new.persistence.connection(paste0(cache.dir,"maveclin.db"))
 if (!persist$isKnown(urn)) {
 	respond400(paste("Unknown URN",urn))
 	quit(save="no",status=0)
-} else if (persist$getStatus(urn) %in% c("pending","processing")) {
-	respondJSON(list(response="busy"))
-	quit(save="no",status=0)
-} else {
-	tryCatch({
-		logger$info("Submitting calibration request:",
-			"\nurn:",urn,
-			"\nsymbol:",symbol,
-			"\nensemblGeneID:",ensemblGeneID,
-			"\nmafCutoff:",mafCutoff,
-			"\nflip:",flip,
-			"\nhomozygous:",homozygous
-		)
-		with(inputPOST,persist$setParameters(
-			urn=urn,
-			symbol=symbol,
-			ensemblGeneID=ensemblGeneID,
-			mafCutoff=as.numeric(mafCutoff),
-			flip=as.logical(flip),
-			homozygous=is.logical(homozygous)
-		))
-		respondJSON(list(response="submitted"))
-		quit(save="no",status=0)
-	},error=function(err) {
-		respond400(err)
-		quit(save="no",status=0)
-	})
-}
+} 
+
+status <- persist$getStatus(urn)
+respondJSON(list(status=status))

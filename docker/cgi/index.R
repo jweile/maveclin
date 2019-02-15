@@ -25,7 +25,7 @@ suppressMessages({
 })
 setMessageSink("/dev/null")
 log.dir <- Sys.getenv("MAVECLIN_LOGS",unset="/var/www/mavevis/logs/")
-logger <- new.logger(paste0(log.dir,"cgi.log"))
+logger <- new.logger(paste0(log.dir,"cgi.log"),stdout=FALSE)
 
 #define error handler
 handler <- function() {
@@ -34,12 +34,13 @@ handler <- function() {
 			geterrmessage(),"\n",
 			paste(.traceback(),collapse="\n\t--> ")
 		)
-		cgir::respond500("Internal Server Error\n=============================\n")
+		cgir::respond500(paste(
+			"Internal Server Error\n=============================\n",
+			msg
+		))
 		logger$err(msg)
 	},finally={
-		if (die) {
-			quit(save="no",status=0)
-		}
+		quit(save="no",status=0)
 	})
 }
 #register handler
@@ -52,7 +53,7 @@ cache.dir <- Sys.getenv("MAVECLIN_CACHE",unset="/var/www/maveclin/cache/")
 templ.dir <- "/var/www/html/maveclin/httpdocs/"
 
 #turns an identifier into a hyperlink
-linkify <- function(x) paste0("<a href=\"index.R?q=",URLencode(x,reserved=TRUE),"\">",x,"</a>")
+linkify <- function(x) paste0("<a href=\"?q=",URLencode(x,reserved=TRUE),"\">",x,"</a>")
 
 #turns a dataframe into an html table
 df2html <- function(df) {
@@ -86,7 +87,7 @@ scoresetPage <- function(urn, persist) {
 		respondTemplateHTML(paste0(templ.dir,"caliScoreset.html"),c(setDetail,imgTarget=imgName,varTable=varHtml))
 
 	} else {
-		respondTemplateHTML(paste0(templ.dir,"newScoreset.html"),setDetail)
+		respondTemplateHTML(paste0(templ.dir,"caliScoreset.html"),setDetail)
 	}
 }
 

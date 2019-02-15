@@ -107,7 +107,7 @@ RUN sqlite3 $MAVECLIN_CACHE/maveclin.db < dbInit.sql
 ADD crontab /etc/cron.d/maveclin-cron
 RUN chmod 0644 /etc/cron.d/maveclin-cron && \
     crontab /etc/cron.d/maveclin-cron && \
-    chmod a+x /setup/sync.R
+    chmod a+x /setup/sync.R /setup/calibrationCron.R
 
 #startup script starts apache and daemon
 CMD bash /setup/startup.sh

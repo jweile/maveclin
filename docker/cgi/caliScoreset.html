@@ -20,10 +20,18 @@
 	<div class="main">
 		<div>
 			<div class="box widget">
-				<h3>%symbol</h3>
-				<p>MaveDB accession: %urn</p>
-				<p>Ensembl Gene ID: %ensemblGeneID</p>
+				<h3 id="urn">%urn</h3>
 				<p>Last updated: %lastUpdated</p>
+				<!-- <p>Gene symbol: %symbol</p> -->
+				<p>
+					<label class="left" for="genesymbol">Gene symbol</label>
+					<input id="genesymbol" class="ui-corner-all" type="text" value="%symbol">
+				</p>
+				<!-- <p>Ensembl Gene ID: %ensemblGeneID</p> -->
+				<p>
+					<label class="left" for="ensemblID">Ensembl Gene ID</label>
+					<input id="ensemblID" class="ui-corner-all" type="text" value="%ensemblGeneID">
+				</p>
 
 				<h4>Calibration parameters:</h4>
 				<p>
@@ -39,17 +47,28 @@
 					<input id="homozygous" class="ui-corner-all" type="checkbox" value="%homozygous"/>
 				</p>
 				<div class="buttonbar">
+					<span id="statusindicator">
+						<span id="statusmessage">%status</span>&nbsp;
+						<img src="images/spinner_16x16.gif">
+					</span>
 					<button id="calibrateButton">Calibrate</button>
 				</div>
 			</div>
-			<div class="box widget">
-				<img src="/%imgTarget" width="300px;">
+			<div class="box widget" id="imgbox">
+				<!-- <img src="/%imgTarget" width="300px;"> -->
 			</div>
 		</div>
-		<div class="box widget" >
+		<div class="box widget" id="tablebox">
 				<h3>Gold Standard Variants</h3>
 			%varTable
 		</div>
+	</div>
+
+	<div id="errordialog" title="Error">
+		<p>
+			<span class="ui-icon ui-icon-alert" style="float:left; margin:0 7px 20px 0;"></span>
+			<div id="errormessage"></div>
+		</p>
 	</div>
 
 	<div id="disclaimerDialog" title="Disclaimer"></div>
