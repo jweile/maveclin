@@ -21,8 +21,11 @@ $(document).ready(function(){
 
 	var urn = $("#urn").text();
 
-	$("#imgbox").hide();
-	$("#tablebox").hide();
+	//if there is no gold standard table to show, hide the box
+	if ($("#tablebox").find("table").length == 0) {
+		$("#imgbox").hide();
+		$("#tablebox").hide();
+	}
 	$("#statusindicator").hide();
 
 	$("#calibrateButton").click(function(){
@@ -60,6 +63,15 @@ $(document).ready(function(){
 		var mafCutoff = $("#mafCutoff").val();
 		var homozygous = $("#homozygous").prop("checked");
 
+		window.console&&console.log(
+			"urn: "+urn+
+			"\n symbol: "+symbol+
+			"\n ensemblGeneID: "+ensemblGeneID+
+			"\n mafCutoff: "+mafCutoff+
+			"\n flip: "+flip+
+			"\n homozygous: "+homozygous
+		);
+
 		statusMessage("pending");
 		$("#calibrateButton").prop("disabled",true);
 
@@ -75,10 +87,14 @@ $(document).ready(function(){
 			switch(data.response) {
 				case "busy":
 					showError("Already processing existing request!")
+					statusMessage(null);
 				break;
 				case "submitted":
-					setTimeout(pollStatus,1000);
+					setTimeout(pollStatus,3000);
 				break;
+				default:
+					showError("Unknown response:"+data.response);
+					statusMessage(null);
 			}
 		}).fail(function(xhr,status,error) {
 			showError(error);
@@ -102,12 +118,18 @@ $(document).ready(function(){
 				case "calibrated":
 					loadTable();
 					statusMessage(null);
+					$("#calibrateButton").prop("disabled",false);
 					break;
 				case "error":
 					showError("Calibration failed!");
 					//no 'break' here, so we also apply the 'new' condition
 				case "new":
+					showError(
+						"Dataset status reported as new."+
+						"\nPlease submit a bug report!"
+					);
 					statusMessage(null);
+					$("#calibrateButton").prop("disabled",false);
 					break;
 				default:
 					statusMessage(null);
@@ -116,8 +138,6 @@ $(document).ready(function(){
 						"\nPlease submit a bug report!"
 					);
 			}
-			statusMessage(null);
-			$("#calibrateButton").prop("disabled",false);
 		}).fail(function(xhr,status,error) {
 			showError(error);
 			statusMessage(null);

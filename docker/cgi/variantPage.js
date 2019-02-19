@@ -54,7 +54,15 @@ $(document).ready(function(){
 		$("#posteriorDisplay").text(
 			posterior.toFixed(2) + 
 			" CI: [ " + postLeft.toFixed(2) + 
-			" ; " + postRight.toFixed(2) + " ]"
+			" ; " + postRight.toFixed(2) + " ]" +
+			" (Prior: "+prior.toFixed(2) + ")"
+		);
+		$("#postImgContainer").html(
+			"<img src='drawInterval.R"+
+			"?lower="+postLeft+
+			"&amp;mid="+posterior+
+			"&amp;upper="+postRight+
+			"&amp;type=p'/>"
 		);
 	}
 

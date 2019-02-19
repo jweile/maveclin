@@ -69,6 +69,9 @@ df2html <- function(df) {
 scoresetPage <- function(urn, persist) {
 
 	setDetail <- persist$getScoreset(urn)
+	setDetail$symbol <- paste(setDetail$symbol,collapse="|")
+	setDetail$ensemblGeneID <- paste(setDetail$ensemblGeneID,collapse="|")
+
 	if (setDetail$status == "calibrated") {
 
 		vars <- persist$getVariants(urn)
@@ -81,10 +84,13 @@ scoresetPage <- function(urn, persist) {
 
 		imgName <- paste0(urn,"_calibration.png")
 		imgFrom <- paste0(cache.dir,imgName)
-		imgTo <- paste0(templ.dir,imgName)
+		imgTo <- paste0(templ.dir,"imgcache/",imgName)
 		file.copy(imgFrom,imgTo)
 
-		respondTemplateHTML(paste0(templ.dir,"caliScoreset.html"),c(setDetail,imgTarget=imgName,varTable=varHtml))
+		respondTemplateHTML(
+			paste0(templ.dir,"caliScoreset.html"),
+			c(setDetail,imgTarget=paste0("imgcache/",imgName),varTable=varHtml)
+		)
 
 	} else {
 		respondTemplateHTML(paste0(templ.dir,"caliScoreset.html"),setDetail)
@@ -96,15 +102,21 @@ variantPage <- function(acc, persist) {
 	lo2post <- function(k) exp(k)/(1+exp(k))
 
 	varDetail <- persist$getVariantDetail(acc)
-	varDetail <- lapply(varDetail,function(x) {
-		if (length(x) > 1) {
-			paste(x,collapse=", ")
-		} else if (length(x) < 1 || is.na(x)) {
-			"N/A"
-		} else { 
-			x
-		}
-	})
+	varDetail$symbol <- gsub("\\|"," / ",varDetail$symbol)
+	varDetail$ensemblGeneID <- gsub("\\|"," / ",varDetail$ensemblGeneID)
+	varDetail$maf <- if (is.na(varDetail$maf)) {
+		"<i>not present</i>"
+	} else {
+		sprintf("%.4f%%",varDetail$maf*100)
+	}
+	varDetail$clinsig <- if (is.na(varDetail$clinsig)) {
+		"<i>unknown</i>"
+	} else {
+		foo <- gsub("GnomAD","",varDetail$clinsig)
+		if (nchar(foo)==0) {
+			"<i>unknown</i>"
+		} else foo
+	}
 	# varDetail$ci <- with(varDetail,sprintf("[ %.2f ; %.2f ]",llrCIleft/log(2),llrCIright/log(2)))
 	varDetail$ciLeft <- varDetail$llrCIleft
 	varDetail$ciRight <- varDetail$llrCIright
