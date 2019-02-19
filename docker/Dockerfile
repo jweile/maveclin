@@ -59,7 +59,8 @@ RUN Rscript installDependencies.R ${UPDATE_RPKG}
 
 
 # Create maveclin's directory structure and grant access to apache
-RUN mkdir -p /var/www/html/maveclin/httpdocs &&\
+RUN mkdir -p /var/www/html/maveclin/httpdocs/imgcache &&\
+    chmod 777 /var/www/html/maveclin/httpdocs/imgcache
     mkdir -p /var/www/maveclin/logs &&\
     chmod 777 /var/www/maveclin/logs &&\
     mkdir -p /var/www/maveclin/cache/ &&\
@@ -68,10 +69,12 @@ RUN mkdir -p /var/www/html/maveclin/httpdocs &&\
 #set environment variables so the app knows were to write/read data
 ENV MAVECLIN_CACHE /var/www/maveclin/cache/
 ENV MAVECLIN_LOGS /var/www/maveclin/logs/
-#Note: the apache user cannot see these variables, so they must also be set in the
+#Note: the apache user and cron cannot see these variables, so they must also be set in the
 # apache config file (maveclin.conf)!!!
 RUN printf "export MAVECLIN_CACHE=/var/www/maveclin/cache/\n">>/etc/apache2/envvars &&\
-    printf "export MAVECLIN_LOGS=/var/www/maveclin/logs/\n">>/etc/apache2/envvars
+    printf "export MAVECLIN_LOGS=/var/www/maveclin/logs/\n">>/etc/apache2/envvars &&\
+    printf "export MAVECLIN_CACHE=/var/www/maveclin/cache/\n">>/etc/environment &&\
+    printf "export MAVECLIN_LOGS=/var/www/maveclin/logs/\n">>/etc/environment
 
 #Move CGI scripts to staging location and grant access to apache
 ADD cgi/ /var/www/html/maveclin/httpdocs/
@@ -100,8 +103,10 @@ RUN a2dissite 000-default.conf && a2ensite maveclin
 # COPY startup.sh daemon.R sync.R /setup/
 COPY startup.sh sync.R calibrationCron.R dbInit.sql /setup/
 
-#run db init script
-RUN sqlite3 $MAVECLIN_CACHE/maveclin.db < dbInit.sql
+#run DB init script and allow www user to write to DB
+RUN sqlite3 $MAVECLIN_CACHE/maveclin.db < dbInit.sql && \
+    chmod 666 maveclin.db
+
 
 #setup cronjob for synchronization script
 ADD crontab /etc/cron.d/maveclin-cron
