@@ -71,26 +71,29 @@ if (!persist$isKnown(urn)) {
 	quit(save="no",status=0)
 } else {
 	tryCatch({
-		logger$info("Submitting calibration request:",
-			"\nurn:",urn,
-			"\nsymbol:",symbol,
-			"\nensemblGeneID:",ensemblGeneID,
-			"\nmafCutoff:",mafCutoff,
-			"\nflip:",flip,
-			"\nhomozygous:",homozygous
-		)
-		with(inputPOST,persist$setParameters(
-			urn=urn,
-			symbol=symbol,
-			ensemblGeneID=ensemblGeneID,
-			mafCutoff=as.numeric(mafCutoff),
-			flip=as.logical(flip),
-			homozygous=is.logical(homozygous)
-		))
+		with(inputPOST,{
+			logger$info("Submitting calibration request:",
+				"\nurn:",urn,
+				"\nsymbol:",symbol,
+				"\nensemblGeneID:",ensemblGeneID,
+				"\nmafCutoff:",mafCutoff,
+				"\nflip:",flip,
+				"\nhomozygous:",homozygous
+			)
+			persist$setParameters(
+				urn=urn,
+				symbol=strsplit(symbol,"\\|")[[1]],
+				ensemblGeneID=strsplit(ensemblGeneID,"\\|")[[1]],
+				mafCutoff=as.numeric(mafCutoff),
+				flip=as.logical(flip),
+				homozygous=is.logical(homozygous)
+			)
+		})
 		respondJSON(list(response="submitted"))
 		quit(save="no",status=0)
 	},error=function(err) {
-		respond400(err)
+		logger$error(err$message)
+		respond400(err$message)
 		quit(save="no",status=0)
 	})
 }
