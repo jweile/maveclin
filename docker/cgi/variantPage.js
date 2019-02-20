@@ -66,22 +66,37 @@ $(document).ready(function(){
 		);
 	}
 
+	function checkPriorInput() {
+		var priorVal = $("#prior").val();
+		if (priorVal && !isNaN(parseFloat(priorVal))) {
+			calcPosterior();
+			$("#priorDialog").dialog("close");
+		} else {
+			$("#prior").animate({
+				backgroundColor: "red"
+			}).animate({
+				backgroundColor: "white"
+			});
+		}
+	}
+
 	//define the prior/posterior dialog box
 	$("#priorDialog").dialog({
 		autoOpen: false,
 		modal: true,
 		buttons: {
 			OK: function() {
-				if ($("#prior").val()) {
-					calcPosterior();
-					$(this).dialog("close");
-				} else {
-					//highlight field?
-				}
+				checkPriorInput();
 			},
 			Cancel: function() {
 				$(this).dialog("close");
 			}
+		}
+	});
+
+	$('#priorDialog').on('keyup', function(e){
+		if (e.keyCode == $.ui.keyCode.ENTER) {
+			$(':button:contains("OK")').click();
 		}
 	});
 
