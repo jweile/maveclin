@@ -390,9 +390,19 @@ new.persistence.connection <- function(dbfile) {
 	}
 
 	searchVariants <- function(query) {
-		variants <- dbGetQuery(.con,"SELECT accession, hgvs_pro, clinsig FROM variants;")
-		hits <- apply(apply(variants,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
-		return(variants[hits,])
+		res <- dbSendStatement(.con,
+	 		"SELECT accession, symbol, hgvs_pro, clinsig, ensemblGeneID FROM 
+	 		variants INNER JOIN scoresets 
+	 		ON variants.scoreset = scoresets.urn 
+	 		AND hgvs_pro LIKE $pattern;"
+	 	)
+	 	dbBind(res, list(pattern=paste0("%",query,"%")))
+	 	variants <- dbFetch(res)
+	 	dbClearResult(res)
+	 	return(variants)
+		# variants <- dbGetQuery(.con,"SELECT accession, hgvs_pro, clinsig FROM variants;")
+		# hits <- apply(apply(variants,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
+		# return(variants[hits,])
 	}
 
 	getPending <- function() {
