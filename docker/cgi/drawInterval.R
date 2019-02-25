@@ -88,8 +88,8 @@ plotInterval <- function(lower,mid,upper,
 	)
 	axis(1)
 	rect(
-		xborders[-(resolution+1)],0,
-		xborders[-1],1,
+		xborders[-(resolution+1)],0.3,
+		xborders[-1],0.7,
 		border=NA,col=gradient(xmids)
 	)
 	segments(lower,0.5,upper,0.5,lty="dashed",lwd=2,)
