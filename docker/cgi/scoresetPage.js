@@ -47,10 +47,10 @@ $(document).ready(function(){
 	}
 
 	function statusMessage(msg) {
-		if (status == null) {
+		if (msg == null) {
 			$("#statusindicator").hide();
 		} else {
-			$("#statusMessage").text(msg);
+			$("#statusmessage").text(msg);
 			$("#statusindicator").show();
 		}
 	}
@@ -82,14 +82,15 @@ $(document).ready(function(){
 			mafCutoff : mafCutoff,
 			flip : flip,
 			homozygous : homozygous
-		}).done(function(rawdata) {
-			data = JSON.parse(rawdata);
+		}).done(function(data) {
+			// data = JSON.parse(rawdata);
 			switch(data.response) {
 				case "busy":
 					showError("Already processing existing request!")
 					statusMessage(null);
 				break;
 				case "submitted":
+					window.console&&console.log("Successfully submitted! Scheduling poll...");
 					setTimeout(pollStatus,3000);
 				break;
 				default:
@@ -104,18 +105,21 @@ $(document).ready(function(){
 	}
 
 	function pollStatus() {
+		window.console&&console.log("Polling status...");
 		$.post("queryStatus.R",{
 			urn : urn
-		}).done(function(rawdata) {
-			data = JSON.parse(rawdata);
+		}).done(function(data) {
+			// data = JSON.parse(rawdata);
 			switch(data.status) {
 				case "pending":
 					//same as processing, so no 'break'
 				case "processing":
 					statusMessage(data.status);
+					window.console&&console.log("Pending or processing. Scheduling another poll...");
 					setTimeout(pollStatus,1000);
 					break;
 				case "calibrated":
+					window.console&&console.log("Done. Loading table...");
 					loadTable();
 					statusMessage(null);
 					$("#calibrateButton").prop("disabled",false);
@@ -146,7 +150,15 @@ $(document).ready(function(){
 	}
 
 	function loadTable() {
-		//TODO
+		window.console&&console.log("Querying table...");
+		$.post("getScoresetTable.R",{
+			urn : urn
+		}).done(function(data) {
+			$("#tablebox").html(data.tableHTML);
+			$("#imgbox").first().attr("src",data.imgTarget);
+		}).fail(function(xhr,status,error) {
+			showError(error);
+		});
 	}
 
 });
