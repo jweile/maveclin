@@ -74,9 +74,10 @@ scoresetPage <- function(urn, persist) {
 
 	if (setDetail$status == "calibrated") {
 
-		vars <- persist$getVariants(urn)
-		#remove variants that are not part of a reference set (and drop the scoreset reference)
-		vars <- vars[!is.na(vars$refset),-2]
+		# vars <- persist$getVariants(urn)
+		# #remove variants that are not part of a reference set (and drop the scoreset reference)
+		# vars <- vars[!is.na(vars$refset),-2]
+		vars <- persist$getGoldStandard(urn)
 		#linkify the accessions
 		vars$accession <- sapply(vars$accession,linkify)
 		#turn to HTML table
@@ -93,7 +94,11 @@ scoresetPage <- function(urn, persist) {
 		)
 
 	} else {
-		respondTemplateHTML(paste0(templ.dir,"caliScoreset.html"),setDetail)
+		respondTemplateHTML(paste0(templ.dir,"caliScoreset.html"),c(setDetail,
+			#1x1 pixel empty image
+			imgTarget="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs%3D",
+			varTable=""
+		))
 	}
 }
 
@@ -120,6 +125,7 @@ variantPage <- function(acc, persist) {
 	# varDetail$ci <- with(varDetail,sprintf("[ %.2f ; %.2f ]",llrCIleft/log(2),llrCIright/log(2)))
 	varDetail$ciLeft <- varDetail$llrCIleft
 	varDetail$ciRight <- varDetail$llrCIright
+	varDetail[which(is.na(varDetail))] <- "NA"
 	# varDetail$posterior <- with(varDetail,sprintf(
 	# 	"%.2f CI: [ %.2f ; %.2f ]",
 	# 	lo2post(llr),lo2post(llrCIleft),lo2post(llrCIright)
@@ -147,6 +153,7 @@ searchResultPage <- function(query, persist) {
 inputGET <- readGET()
 inputPOST <- readPOST()
 
+useJSON <- ("output" %in% names(inputGET) && inputGET$output == "json")
 
 #if there is a query, do a search
 if ("q" %in% names(inputGET)) {
@@ -158,21 +165,38 @@ if ("q" %in% names(inputGET)) {
 	if (grepl("^urn:mavedb:\\d{8}-\\w{1}-\\d+$",inputGET$q) && 
 			persist$isKnown(inputGET$q)) {
 
-		scoresetPage(inputGET$q, persist)
+		if (!useJSON) {
+			scoresetPage(inputGET$q, persist)
+		} else {
+			scoreSetData <- persist$getScoreset(inputGET$q)
+			gsData <- persist$getGoldStandard(inputGET$q)
+			respondJSON(list(scoreset=scoreSetData, goldStandard=gsData))
+		}
 
 	#or if it's a variant accession?
 	} else if (grepl("^urn:mavedb:\\d{8}-\\w{1}-\\d+#\\d+$",inputGET$q) &&
 			persist$hasVariant(inputGET$q)) {
 
-		variantPage(inputGET$q, persist)
+		if (!useJSON) {
+			variantPage(inputGET$q, persist)
+		} else {
+			vardata <- persist$getVariantDetail(inputGET$q)
+			respondJSON(vardata)
+		}
 
 	#otherwise it's an open-ended search
 	} else {
-		searchResultPage(inputGET$q, persist)
+		if (!useJSON) {
+			searchResultPage(inputGET$q, persist)
+		} else {
+			scoresets <- persist$searchScoresets(inputGET$q)
+			variants <- persist$searchVariants(inputGET$q)
+			respondJSON(list(scoresets=scoresets,variants=variants))
+		}
 	}
 
 	#FIXME: This should probably be in a "finally" clause
-	persist$close()
+	# persist$close()
 	quit(save="no",status=0)
 
 #otherwise, if there is no query, it's just the main page

@@ -48,58 +48,58 @@ options(
 	error=handler
 )
 
-plotInterval <- function(lower,mid,upper,
-		type=c("llr","probability"),
-		resolution=50) {
+# plotInterval <- function(lower,mid,upper,
+# 		type=c("llr","probability"),
+# 		resolution=50) {
 
-	#check parameters
-	stopifnot(is.numeric(lower), is.numeric(mid), is.numeric(upper))
-	type <- match.arg(type,c("llr","probability"))
-	if (type=="probability") {
-		stopifnot(c(lower,mid,upper) >= 0, c(lower,mid,upper) <= 1)
-	}
+# 	#check parameters
+# 	stopifnot(is.numeric(lower), is.numeric(mid), is.numeric(upper))
+# 	type <- match.arg(type,c("llr","probability"))
+# 	if (type=="probability") {
+# 		stopifnot(c(lower,mid,upper) >= 0, c(lower,mid,upper) <= 1)
+# 	}
 
-	#deterimine x-axis range
-	range <- switch(type,
-		llr=c(min(lower,-2),max(upper,2)),
-		probability=c(0,1)
-	)
+# 	#deterimine x-axis range
+# 	range <- switch(type,
+# 		llr=c(min(lower,-2),max(upper,2)),
+# 		probability=c(0,1)
+# 	)
 
-	#require yogitools library for gradients
-	library(yogitools)
-	gradient <- yogitools::colmap(
-		valStops=switch(type,llr=c(-2,0,2),probability=c(0,0.5,1)),
-		colStops=c("darkolivegreen2","gold","firebrick3")
-	)
-	#determine gradient bins based on resolution
-	xborders <- seq(range[[1]],range[[2]],length.out=resolution+1)
-	xmids <- sapply(1:resolution,function(i) mean(xborders[i:(i+1)]))
+# 	#require yogitools library for gradients
+# 	library(yogitools)
+# 	gradient <- yogitools::colmap(
+# 		valStops=switch(type,llr=c(-2,0,2),probability=c(0,0.5,1)),
+# 		colStops=c("darkolivegreen2","gold","firebrick3")
+# 	)
+# 	#determine gradient bins based on resolution
+# 	xborders <- seq(range[[1]],range[[2]],length.out=resolution+1)
+# 	xmids <- sapply(1:resolution,function(i) mean(xborders[i:(i+1)]))
 
-	#draw plot
-	op <- par(mar=c(4,0,0,0)+.1)
-	plot(NA,type="n",
-		xlim=range,ylim=c(0,1),
-		xlab=switch(type,
-			llr=expression(log[2]~"Likelihood Ratio"),
-			probability="Posterior probability"
-		),
-		ylab="",
-		axes=FALSE
-	)
-	axis(1)
-	rect(
-		xborders[-(resolution+1)],0.3,
-		xborders[-1],0.7,
-		border=NA,col=gradient(xmids)
-	)
-	segments(lower,0.5,upper,0.5,lty="dashed",lwd=2,)
-	segments(c(lower,upper),0.1,c(lower,upper),0.9,lwd=2)
-	segments(mid,0.2,mid,0.8,lwd=4)
-	offset <- (upper-lower)/20
-	segments(lower,c(0.1,0.9),lower+offset,c(0.1,0.9),lwd=2)
-	segments(upper,c(0.1,0.9),upper-offset,c(0.1,0.9),lwd=2)
-	par(op)
-}
+# 	#draw plot
+# 	op <- par(mar=c(4,0,0,0)+.1)
+# 	plot(NA,type="n",
+# 		xlim=range,ylim=c(0,1),
+# 		xlab=switch(type,
+# 			llr=expression(log[2]~"Likelihood Ratio"),
+# 			probability="Posterior probability"
+# 		),
+# 		ylab="",
+# 		axes=FALSE
+# 	)
+# 	axis(1)
+# 	rect(
+# 		xborders[-(resolution+1)],0.3,
+# 		xborders[-1],0.7,
+# 		border=NA,col=gradient(xmids)
+# 	)
+# 	segments(lower,0.5,upper,0.5,lty="dashed",lwd=2,)
+# 	segments(c(lower,upper),0.1,c(lower,upper),0.9,lwd=2)
+# 	segments(mid,0.2,mid,0.8,lwd=4)
+# 	offset <- (upper-lower)/20
+# 	segments(lower,c(0.1,0.9),lower+offset,c(0.1,0.9),lwd=2)
+# 	segments(upper,c(0.1,0.9),upper-offset,c(0.1,0.9),lwd=2)
+# 	par(op)
+# }
 
 
 #Caching directory

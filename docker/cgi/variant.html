@@ -23,15 +23,17 @@
 		<p>GnomAD Allele frequency: %maf</p>
 		<p>ClinVar Call: %clinsig</p>
 		<h4>Functional assay</h4>
-		<p>MaveDB accession: %accession</p>
-		<p>Log<sub>2</sub> Likelihood Ratio: <span id="llrDisplay"></span></p>
-		<p><img src="drawInterval.R?lower=%ciLeft&amp;mid=%llr&amp;upper=%ciRight&amp;type=l&amp;rebase=TRUE"></p>
-		<p>
-			Posterior probability of pathogenicity: 
-			<span id="posteriorDisplay"></span> 
-		</p>
-		<p id="postImgContainer"></p>
-		<p><button id="priorButton">Calculate posterior</button></p>
+		<div id="funcAssayBox">
+			<p>MaveDB accession: %accession</p>
+			<p>Log<sub>2</sub> Likelihood Ratio: <span id="llrDisplay"></span></p>
+			<p><img src="drawInterval.R?lower=%ciLeft&amp;mid=%llr&amp;upper=%ciRight&amp;type=l&amp;rebase=TRUE"></p>
+			<p>
+				Posterior probability of pathogenicity: 
+				<span id="posteriorDisplay"></span> 
+			</p>
+			<p id="postImgContainer"></p>
+			<p><button id="priorButton">Calculate posterior</button></p>
+		</div>
 	</div>
 
 	<div id="priorDialog" title="Choose a prior" >

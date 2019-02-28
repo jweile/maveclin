@@ -154,8 +154,13 @@ $(document).ready(function(){
 		$.post("getScoresetTable.R",{
 			urn : urn
 		}).done(function(data) {
-			$("#tablebox").html(data.tableHTML);
-			$("#imgbox").first().attr("src",data.imgTarget);
+			$("#tablebox").html(
+				"<h3>Gold Standard Variants</h3>" + 
+				data.table
+			);
+			$("#imgbox").find("img").attr("src",data.imgTarget);
+			$("#tablebox").show();
+			$("#imgbox").show();
 		}).fail(function(xhr,status,error) {
 			showError(error);
 		});

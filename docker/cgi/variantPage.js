@@ -19,12 +19,16 @@
 
 $(document).ready(function(){
 
-	//Log Likelihood Ratio
-	var llr = parseFloat($("#llr").val());
-	//Log Likelihood Ratio Confidence Interval Lower value
-	var ciLeft = parseFloat($("#ciLeft").val());
-	//Log Likelihood Ratio Confidence Interval Upper value
-	var ciRight = parseFloat($("#ciRight").val());
+	if ($("#llr").val() == "NA") {
+		$("#funcAssayBox").html("No functional data available");
+	} else {
+		//Log Likelihood Ratio
+		var llr = parseFloat($("#llr").val());
+		//Log Likelihood Ratio Confidence Interval Lower value
+		var ciLeft = parseFloat($("#ciLeft").val());
+		//Log Likelihood Ratio Confidence Interval Upper value
+		var ciRight = parseFloat($("#ciRight").val());
+	}
 
 	//Rebase LLR to log(2) and display nicely (with sig.digits etc)
 	function formatLLR() {
