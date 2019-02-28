@@ -56,7 +56,6 @@
 #' persist$isKnown("urn:mavedb:00000001-c-2")
 #' persist$getStatus("urn:mavedb:00000001-c-2")
 #' persist$setStatus("urn:mavedb:00000001-c-2","new")
-#' persist$close()
 #' 
 new.persistence.connection <- function(dbfile) {
 
@@ -506,8 +505,12 @@ new.persistence.connection <- function(dbfile) {
 		},finally={
 			.disconnect()
 		})
-		hits <- apply(apply(scoresets,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
-		return(scoresets[hits,])
+		if (nrow(scoresets) > 0) {
+			hits <- apply(apply(scoresets,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
+			return(scoresets[hits,])
+		} else {
+			return(scoresets)
+		}
 	}
 
 	#retrieves a table of variants whose hgvs string matches the query
