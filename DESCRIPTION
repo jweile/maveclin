@@ -8,6 +8,6 @@ License: AGPL-3 + file COPYING
 Encoding: UTF-8
 LazyData: true
 Suggests: testthat
-Imports: hash, httr, RSQLite, rapimave, hgvsParseR, yogitools, yogilog
+Imports: hash, httr, RSQLite, rapimave, hgvsParseR, yogitools, yogilog, flock
 Remotes: github::jweile/rapimave, github::jweile/hgvsParseR, github::jweile/yogitools, github::jweile/yogilog
 RoxygenNote: 6.1.0

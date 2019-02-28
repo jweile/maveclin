@@ -20,9 +20,11 @@ library("maveclin")
 context("persistence")
 
 setup <- function() {
-	# sqlfile <- system.file("testdata","dbInit.sql",package="maveclin")
-	sqlfile <- "docker/dbInit.sql"
-	stopifnot(file.exists(sqlfile))
+	sqlfile <- system.file("testdata","dbInit.sql",package="maveclin")
+	# sqlfile <- "docker/dbInit.sql"
+	if(!file.exists(sqlfile)) {
+		stop("Cannot find file ",sqlfile)
+	}
 	dbfile <- tempfile(fileext=".db")
 	system(paste("sqlite3",dbfile,"<",sqlfile))
 	return(dbfile)
@@ -58,7 +60,7 @@ test_that("scoresets",{
 	expect_equal(values$flip,flip)
 	expect_equal(ps$getStatus("urn:mavedb:00000001-a-1"),"pending")
 
-	ps$close()
+	# ps$close()
 	teardown(dbfile)
 	
 })

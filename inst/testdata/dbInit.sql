@@ -1,3 +1,4 @@
+/*
 # Copyright (C) 2018  Jochen Weile, Roth Lab
 #
 # This file is part of MaveClin.
@@ -14,14 +15,16 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with MaveClin.  If not, see <https://www.gnu.org/licenses/>.
-
-install.packages(c("hash","httr","RJSONIO","devtools","RSQLite","flock"),repos="http://cran.utstat.utoronto.ca/")
-
-library(devtools)
-
-install_github("jweile/yogitools")
-install_github("jweile/yogilog")
-install_github("jweile/cgir")
-install_github("VariantEffect/hgvsParseR")
-install_github("VariantEffect/rapimave")
-install_github("jweile/maveclin")
+*/
+CREATE TABLE IF NOT EXISTS scoresets (
+	urn TEXT PRIMARY KEY, symbol TEXT, ensemblGeneID TEXT, mafCutoff REAL, 
+	flip BOOLEAN, homozygous BOOLEAN, lastUpdated DATE, status TEXT
+);
+CREATE TABLE IF NOT EXISTS variants (
+	accession TEXT PRIMARY KEY, scoreset TEXT, hgvs_pro TEXT, score REAL, sd REAL, se REAL,
+	flippedScore REAL, clinsig TEXT, maf REAL, hom INTEGER, refset TEXT,
+	llr REAL, llrCIleft REAL, llrCIright REAL,
+	FOREIGN KEY(scoreset) REFERENCES scoresets(urn)
+);
+CREATE INDEX idx_var_ss ON variants (scoreset);
+CREATE INDEX idx_var_hvgs ON variants (hgvs_pro);

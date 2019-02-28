@@ -18,18 +18,33 @@
 
 #' Create a new persistence connection object
 #' 
-#' Constructor for creating a new object of type persistence.connection. 
+#' Constructor for creating a new object of type persistence.connection. Each operation uses a mutex
+#' lock to secure the database. 
 #' 
 #' Provides the following methods:
 #' \begin{description}
 #' \item{isKnown(urn)} checks whether a URN is known to the database
+#' \item{isLocked()} checks whether the database is currently locked
+#' \item{getDate(urn)} retrives the lastModified date for the scoreset with the given URN
 #' \item{getStatus(urn)} retrieves the status of the scoreset with the given URN
 #' \item{setStatus(urn)} sets the status of the scoreset with the given URN to the given status. 
-#'     Permissible values are "new", "configured", "calibrated".
+#'     Permissible values are "new","pending","processing","calibrated",and "error".
 #' \item{getParameters(urn)} retrieves the calibration parameters for the scoreset with the given URN
+#' \item{setParameters(urn,symbol,ensemblGeneID,mafCutoff,flip,homozygous)} changes the parameters for 
+#'     the dataset with the given URN to the given values.
+#' \item{getScoreset(urn)} retrieves scoreset entry with the given URN
 #' \item{newScoreset(urn,symbols,ensembl)} adds a new scoreset with the given URN to the database and initializes
 #'     its gene symbols and ensembl gene names to the given values.
-#' \item{close()} closes the database connection
+#' \item{getGoldStandard(urn)} retrives the set of gold standard variants for the given urn
+#' \item{getVariants(urn)} retrives all variants for the given URN
+#' \item{hasVariant(acc)} checks whether the variant with the given accession exists
+#' \item{getVariantDetail(acc)} retrives all adata on the given variant
+#' \item{calibrateScores(caliScores)} applies the given calibrated scores to the variants in the database
+#'     caliScores should be a \code{data.frame} with at the columns: 
+#'     accession, flippedScore, clinsig, maf, hom, set, llr, llrCIleft and llrCIright
+#' \item{searchScoresets(query)} retrives a table of scoresets for which any field matches the query
+#' \item{searchVariants(query)} retrieves a table of variants for which the hgvs string matches the query
+#' \item{getPending()} retrieves a list of URNs of scoresets that are currently in the 'pending' state.
 #' \end{description}
 #' 
 #' @param dbfile the SQLite database file
@@ -48,18 +63,7 @@ new.persistence.connection <- function(dbfile) {
 	library(DBI)
 	# library(RMariaDB)
 	library(RSQLite)
-
-	# .con <- dbConnect(RMariaDB::MariaDB(), 
-	# 	dbname="maveclin",
-	# 	user=user, password=pwd, host=host
-	# )
-	.con <- dbConnect(RSQLite::SQLite(),dbfile)
-
-	#check that the database has been properly initialized
-	check <- dbGetQuery(.con,"SELECT name FROM sqlite_master WHERE type='table';")
-	if (!all(c("scoresets","variants") %in% check$name)) {
-		stop("Database was not initialized!")
-	}
+	library(flock)
 
 	#Scoreset URN validation regex
 	urnRX <- "^urn:mavedb:\\d{8}-\\w{1}-\\d+$"
@@ -70,18 +74,64 @@ new.persistence.connection <- function(dbfile) {
 	#Ensembl Gene ID regex
 	ensemblRX <- "^ENS[A-Z]+[0-9]{11}|[A-Z]{3}[0-9]{3}[A-Za-z](-[A-Za-z])?|CG[0-9]+|[A-Z0-9]+\\.[0-9]+|YM[A-Z][0-9]{3}[a-z][0-9]$"
 
+	#internal fields for connection and lock objects
+	.con <- NULL
+	.lockfile <- sub(".db$",".lck",dbfile)
+	.lock <- NULL
+
+	#acquire mutex lock and open DB connection
+	.connect <- function() {
+		# .con <- dbConnect(RMariaDB::MariaDB(), 
+		# 	dbname="maveclin",
+		# 	user=user, password=pwd, host=host
+		# )
+		.lock <<- lock(.lockfile)
+		.con <<- dbConnect(RSQLite::SQLite(),dbfile)
+	}
+	#disconnect and release mutex lock
+	.disconnect <- function() {
+		dbDisconnect(.con)
+		unlock(.lock)
+	}
+
+
+	#check that the database has been properly initialized
+	preflight <- function() {
+		.connect()
+		tryCatch({
+			check <- dbGetQuery(.con,"SELECT name FROM sqlite_master WHERE type='table';")
+		},finally={
+			.disconnect()
+		})	
+		if (!all(c("scoresets","variants") %in% check$name)) {
+			stop("Database was not initialized!")
+		}
+	}
+	preflight()
+
+	#checks whether the database is currently locked
+	isLocked <- function() {
+		is.locked(.lock)
+	}
+
 	#checks whether dataset is known to database
 	isKnown <- function(urn) {
 		stopifnot(
 			grepl(urnRX,urn)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT COUNT(*) FROM scoresets WHERE urn = ?urn;",
-				urn=urn
-			)
-		)
-		return(res[,1] > 0)
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT COUNT(*) FROM scoresets WHERE urn = ?urn;",
+					urn=urn
+				)
+			) 
+			return(res[,1] > 0)
+		},finally={
+			.disconnect()
+		})
+		
 	}
 
 	#returns the 'lastUpdated' date for the given scoreset URN
@@ -89,12 +139,17 @@ new.persistence.connection <- function(dbfile) {
 		stopifnot(
 			grepl(urnRX,urn)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT lastUpdated FROM scoresets WHERE urn = ?urn;",
-				urn=urn
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT lastUpdated FROM scoresets WHERE urn = ?urn;",
+					urn=urn
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		if (nrow(res) < 1) {
 			stop("Unknown URN ",urn)
 		}
@@ -106,12 +161,17 @@ new.persistence.connection <- function(dbfile) {
 		stopifnot(
 			grepl(urnRX,urn)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT status FROM scoresets WHERE urn = ?urn;",
-				urn=urn
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT status FROM scoresets WHERE urn = ?urn;",
+					urn=urn
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		if (nrow(res) < 1) {
 			stop("Unknown URN ",urn)
 		}
@@ -124,14 +184,19 @@ new.persistence.connection <- function(dbfile) {
 			grepl(urnRX,urn),
 			status %in% c("new","pending","processing","calibrated","error")
 		) 
-		res <- dbSendStatement(.con,
-			sqlInterpolate(.con,
-				"UPDATE scoresets SET status = ?status WHERE urn = ?urn;",
-				status=status,
-				urn=urn
+		.connect()
+		tryCatch({
+			res <- dbSendStatement(.con,
+				sqlInterpolate(.con,
+					"UPDATE scoresets SET status = ?status WHERE urn = ?urn;",
+					status=status,
+					urn=urn
+				)
 			)
-		)
-		dbClearResult(res)
+			dbClearResult(res)
+		},finally={
+			.disconnect()
+		})
 	}
 
 	#get the parameters for the scoreset
@@ -139,13 +204,18 @@ new.persistence.connection <- function(dbfile) {
 		stopifnot(
 			grepl(urnRX,urn)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT symbol, ensemblGeneID, mafCutoff, flip, homozygous 
-				FROM scoresets WHERE urn = ?urn;",
-				urn=urn
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT symbol, ensemblGeneID, mafCutoff, flip, homozygous 
+					FROM scoresets WHERE urn = ?urn;",
+					urn=urn
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		if (nrow(res) != 1) {
 			stop("Unknown URN ",urn)
 		}
@@ -180,26 +250,32 @@ new.persistence.connection <- function(dbfile) {
 		if (length(ensemblGeneID) > 1) {
 			ensemblGeneID <- paste(ensemblGeneID,collapse="|")
 		}
-		res <- dbSendStatement(.con,
-			"UPDATE scoresets 
-			SET symbol = $symbol, 
-			ensemblGeneID = $ensemblGeneID,
-			mafCutoff = $mafCutoff,
-			flip = $flip,
-			status = 'pending'
-			WHERE urn = $urn;"
-		)
-		dbBind(res,list(
-			symbol=symbol,
-			ensemblGeneID=ensemblGeneID,
-			mafCutoff=mafCutoff,
-			flip=flip,
-			urn=urn
-		))
-		if (dbGetRowsAffected(res) != 1) {
+		.connect()
+		tryCatch({
+			res <- dbSendStatement(.con,
+				"UPDATE scoresets 
+				SET symbol = $symbol, 
+				ensemblGeneID = $ensemblGeneID,
+				mafCutoff = $mafCutoff,
+				flip = $flip,
+				status = 'pending'
+				WHERE urn = $urn;"
+			)
+			dbBind(res,list(
+				symbol=symbol,
+				ensemblGeneID=ensemblGeneID,
+				mafCutoff=mafCutoff,
+				flip=flip,
+				urn=urn
+			))
+			rowsAffected <- dbGetRowsAffected(res)
+			dbClearResult(res)
+		},finally={
+			.disconnect()
+		})
+		if (rowsAffected != 1) {
 			stop("DB Update failed!")
 		}
-		dbClearResult(res)
 	}
 
 
@@ -208,12 +284,17 @@ new.persistence.connection <- function(dbfile) {
 		stopifnot(
 			grepl(urnRX,urn)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT * FROM scoresets WHERE urn = ?urn;",
-				urn=urn
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT * FROM scoresets WHERE urn = ?urn;",
+					urn=urn
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		if (nrow(res) != 1) {
 			stop("Unknown URN ",urn)
 		}
@@ -241,18 +322,23 @@ new.persistence.connection <- function(dbfile) {
 		if (length(ensembl) > 1) {
 			ensembl <- paste(ensembl,collapse="|")
 		}
-		res <- dbSendStatement(.con,
-			sqlInterpolate(.con,
-				"INSERT INTO scoresets 
-				(urn, symbol, ensemblGeneID, mafCutoff, flip, homozygous, lastUpdated, status) 
-				VALUES (?urn, ?symbol, ?ensembl, 0, 0, 0, ?date, 'new');",
-				urn=urn, 
-				symbol=paste(symbols,collapse="|"),
-				ensembl=paste(ensembl,collapse="|"),
-				date=format(Sys.time(),"%Y-%m-%d")
+		.connect()
+		tryCatch({
+			res <- dbSendStatement(.con,
+				sqlInterpolate(.con,
+					"INSERT INTO scoresets 
+					(urn, symbol, ensemblGeneID, mafCutoff, flip, homozygous, lastUpdated, status) 
+					VALUES (?urn, ?symbol, ?ensembl, 0, 0, 0, ?date, 'new');",
+					urn=urn, 
+					symbol=paste(symbols,collapse="|"),
+					ensembl=paste(ensembl,collapse="|"),
+					date=format(Sys.time(),"%Y-%m-%d")
+				)
 			)
-		)
-		dbClearResult(res)
+			dbClearResult(res)
+		},finally={
+			.disconnect()
+		})
 	}
 
 
@@ -271,40 +357,46 @@ new.persistence.connection <- function(dbfile) {
 			stop("Ambiguous error columns!")
 		}
 
-		res <- dbSendStatement(.con,
-			"INSERT INTO variants (accession, scoreset, hgvs_pro, score, sd, se) 
-					VALUES ($accession, $scoreset, $hgvs_pro, $score, $sd, $se);"
+		.connect()
+		tryCatch({
+			res <- dbSendStatement(.con,
+				"INSERT INTO variants (accession, scoreset, hgvs_pro, score, sd, se) 
+						VALUES ($accession, $scoreset, $hgvs_pro, $score, $sd, $se);"
+			)
+			dbBind(res, data.frame(
+				accession = scores$accession,
+				scoreset = urn,
+				hgvs_pro = scores$hgvs_pro,
+				score = scores$score,
+				sd = if (length(sdCol)==1) scores[,sdCol] else NA,
+				se = if (length(seCol)==1) scores[,seCol] else NA
+			))
+			if (dbGetRowsAffected(res) != nrow(scores)) {
+				warning("Not all entries were updated!")
+			}
+			dbClearResult(res)
+		},finally={
+			.disconnect()
+		})
+	}
+
+	#retrieves the table of gold standard variants for the given scoreset URN
+	getGoldStandard <- function(urn) {
+		stopifnot(
+			grepl(urnRX,urn)
 		)
-		dbBind(res, data.frame(
-			accession = scores$accession,
-			scoreset = urn,
-			hgvs_pro = scores$hgvs_pro,
-			score = scores$score,
-			sd = if (length(sdCol)==1) scores[,sdCol] else NA,
-			se = if (length(seCol)==1) scores[,seCol] else NA
-		))
-		if (dbGetRowsAffected(res) != nrow(scores)) {
-			warning("Not all entries were updated!")
-		}
-		dbClearResult(res)
-		#FIXME: Use dbBind instead of for-loop!
-		# dbBegin(.con)
-		# for (i in 1:nrow(scores)) {
-		# 	res <- dbSendStatement(.con,
-		# 		sqlInterpolate(.con,
-					# "INSERT INTO variants (accession, scoreset, hgvs_pro, score, sd, se) 
-					# VALUES (?acc, ?urn, ?hgvs, ?score, ?sd, ?se);",
-		# 			acc=scores[i,"accession"],
-		# 			urn=urn, 
-		# 			hgvs=scores[i,"hgvs_pro"],
-		# 			score=scores[i,"score"],
-		# 			sd=if(length(sdCol) == 1) scores[i,sdCol] else NA,
-		# 			se=if(length(seCol) == 1) scores[i,seCol] else NA
-		# 		)
-		# 	)
-		# 	dbClearResult(res)
-		# }
-		# dbCommit(.con)
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT * FROM variants WHERE scoreset = ?urn AND refset IS NOT NULL;",
+					urn=urn
+				)
+			)
+		},finally={
+			.disconnect()
+		})
+		return(res)
 	}
 
 	#retrieves the variant table for the given scoreset URN
@@ -312,12 +404,17 @@ new.persistence.connection <- function(dbfile) {
 		stopifnot(
 			grepl(urnRX,urn)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT * FROM variants WHERE scoreset = ?urn",
-				urn=urn
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT * FROM variants WHERE scoreset = ?urn;",
+					urn=urn
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		return(res)
 	}
 
@@ -326,28 +423,39 @@ new.persistence.connection <- function(dbfile) {
 		stopifnot(
 			grepl(accRX,acc)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-				"SELECT COUNT(*) FROM variants WHERE accession = ?acc",
-				acc=acc
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+					"SELECT COUNT(*) FROM variants WHERE accession = ?acc;",
+					acc=acc
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		return(res[,1] > 0)
 	}
 
+	#retrieves a list of all known data on the variant with the given accession
 	getVariantDetail <- function(acc) {
 		stopifnot(
 			grepl(accRX,acc)
 		)
-		res <- dbGetQuery(.con,
-			sqlInterpolate(.con,
-		 		"SELECT * FROM 
-		 		variants INNER JOIN scoresets 
-		 		ON variants.scoreset = scoresets.urn 
-		 		AND variants.accession = ?acc;",
-		 		acc=acc
+		.connect()
+		tryCatch({
+			res <- dbGetQuery(.con,
+				sqlInterpolate(.con,
+			 		"SELECT * FROM 
+			 		variants INNER JOIN scoresets 
+			 		ON variants.scoreset = scoresets.urn 
+			 		AND variants.accession = ?acc;",
+			 		acc=acc
+				)
 			)
-		)
+		},finally={
+			.disconnect()
+		})
 		if (nrow(res) != 1) {
 			stop("Unknown accession ",acc)
 		}
@@ -355,64 +463,87 @@ new.persistence.connection <- function(dbfile) {
 	}
 
 	#applies the given calibrated scores to the variants in the database
+	#caliScores data.frame with at least accession, flippedScore, clinsig, maf, hom, set, llr, llrCIleft and llrCIright columns
 	calibrateScores <- function(caliScores) {
 		stopifnot(
 			inherits(caliScores,"data.frame"),
 			c("accession","llr","llrCIleft","llrCIright") %in% colnames(caliScores)
 		)
-		res <- dbSendStatement(.con,
-			"UPDATE variants 
-			SET flippedScore = $flippedScore, 
-				clinsig = $clinsig, 
-				maf = $maf, 
-				hom = $hom, 
-				refset = $set,
-				llr = $llr, 
-				llrCIleft = $llrCIleft, 
-				llrCIright = $llrCIright 
-			WHERE accession = $accession;"
-		)
-		dbBind(res, caliScores[c(
-			"flippedScore","clinsig","maf","hom","set",
-			"llr","llrCIleft","llrCIright","accession"
-		)])
-		if (dbGetRowsAffected(res) != nrow(caliScores)) {
-			warning("Not all entries were updated!")
-		}
-		dbClearResult(res)
+		.connect()
+		tryCatch({
+			res <- dbSendStatement(.con,
+				"UPDATE variants 
+				SET flippedScore = $flippedScore, 
+					clinsig = $clinsig, 
+					maf = $maf, 
+					hom = $hom, 
+					refset = $set,
+					llr = $llr, 
+					llrCIleft = $llrCIleft, 
+					llrCIright = $llrCIright 
+				WHERE accession = $accession;"
+			)
+			dbBind(res, caliScores[c(
+				"flippedScore","clinsig","maf","hom","set",
+				"llr","llrCIleft","llrCIright","accession"
+			)])
+			if (dbGetRowsAffected(res) != nrow(caliScores)) {
+				warning("Not all entries were updated!")
+			}
+			dbClearResult(res)
+		},finally={
+			.disconnect()
+		})
 
 	}
 
+	#retrieves a table of scoreset for which any field matches the query
+	#returns a dataframe with urn, symbol and ensemblGeneID columns
 	searchScoresets <- function(query) {
-		scoresets <- dbGetQuery(.con,"SELECT urn, symbol, ensemblGeneID FROM scoresets;")
+		.connect()
+		tryCatch({
+			scoresets <- dbGetQuery(.con,"SELECT urn, symbol, ensemblGeneID FROM scoresets;")
+		},finally={
+			.disconnect()
+		})
 		hits <- apply(apply(scoresets,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
 		return(scoresets[hits,])
 	}
 
+	#retrieves a table of variants whose hgvs string matches the query
+	#returns a dataframe with accession, symbol, hgvs_pro, clinsig and ensemblGeneID columns
 	searchVariants <- function(query) {
-		res <- dbSendStatement(.con,
-	 		"SELECT accession, symbol, hgvs_pro, clinsig, ensemblGeneID FROM 
-	 		variants INNER JOIN scoresets 
-	 		ON variants.scoreset = scoresets.urn 
-	 		AND hgvs_pro LIKE $pattern;"
-	 	)
-	 	dbBind(res, list(pattern=paste0("%",query,"%")))
-	 	variants <- dbFetch(res)
-	 	dbClearResult(res)
+		.connect()
+		tryCatch({
+			res <- dbSendStatement(.con,
+		 		"SELECT accession, symbol, hgvs_pro, clinsig, ensemblGeneID FROM 
+		 		variants INNER JOIN scoresets 
+		 		ON variants.scoreset = scoresets.urn 
+		 		AND hgvs_pro LIKE $pattern;"
+		 	)
+		 	#dbBind should automatically escape dangerous characters 
+		 	#and prevent sql injection
+		 	dbBind(res, list(pattern=paste0("%",query,"%")))
+		 	variants <- dbFetch(res)
+		 	dbClearResult(res)
+		},finally={
+			.disconnect()
+		})
 	 	return(variants)
 		# variants <- dbGetQuery(.con,"SELECT accession, hgvs_pro, clinsig FROM variants;")
 		# hits <- apply(apply(variants,2,function(col) grepl(query,col,ignore.case=TRUE)),1,any)
 		# return(variants[hits,])
 	}
 
+	#returns a list of URNs of the scoresets that are currently in the 'pending' state.
 	getPending <- function() {
-		scoresets <- dbGetQuery(.con,"SELECT urn FROM scoresets WHERE status='pending';")
+		.connect()
+		tryCatch({
+			scoresets <- dbGetQuery(.con,"SELECT urn FROM scoresets WHERE status='pending';")
+		},finally={
+			.disconnect()
+		})
 		return(scoresets[,1])
-	}
-
-	#close the db connection
-	close <- function() {
-		dbDisconnect(.con)
 	}
 
 
@@ -427,13 +558,15 @@ new.persistence.connection <- function(dbfile) {
 		newScoreset=newScoreset,
 		newVariants=newVariants,
 		getVariants=getVariants,
+		getGoldStandard=getGoldStandard,
 		hasVariant=hasVariant,
 		getVariantDetail=getVariantDetail,
 		calibrateScores=calibrateScores,
 		searchScoresets=searchScoresets,
 		searchVariants=searchVariants,
 		getPending=getPending,
-		close=close
+		isLocked=isLocked
+		# close=close
 	),class="persistence.connection")
 
 }

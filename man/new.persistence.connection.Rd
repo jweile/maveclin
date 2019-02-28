@@ -13,19 +13,34 @@ new.persistence.connection(dbfile)
 a new persistence.connection object
 }
 \description{
-Constructor for creating a new object of type persistence.connection.
+Constructor for creating a new object of type persistence.connection. Each operation uses a mutex
+lock to secure the database.
 }
 \details{
 Provides the following methods:
 \begin{description}
 \item{isKnown(urn)} checks whether a URN is known to the database
+\item{isLocked()} checks whether the database is currently locked
+\item{getDate(urn)} retrives the lastModified date for the scoreset with the given URN
 \item{getStatus(urn)} retrieves the status of the scoreset with the given URN
 \item{setStatus(urn)} sets the status of the scoreset with the given URN to the given status. 
-    Permissible values are "new", "configured", "calibrated".
+    Permissible values are "new","pending","processing","calibrated",and "error".
 \item{getParameters(urn)} retrieves the calibration parameters for the scoreset with the given URN
+\item{setParameters(urn,symbol,ensemblGeneID,mafCutoff,flip,homozygous)} changes the parameters for 
+    the dataset with the given URN to the given values.
+\item{getScoreset(urn)} retrieves scoreset entry with the given URN
 \item{newScoreset(urn,symbols,ensembl)} adds a new scoreset with the given URN to the database and initializes
     its gene symbols and ensembl gene names to the given values.
-\item{close()} closes the database connection
+\item{getGoldStandard(urn)} retrives the set of gold standard variants for the given urn
+\item{getVariants(urn)} retrives all variants for the given URN
+\item{hasVariant(acc)} checks whether the variant with the given accession exists
+\item{getVariantDetail(acc)} retrives all adata on the given variant
+\item{calibrateScores(caliScores)} applies the given calibrated scores to the variants in the database
+    caliScores should be a \code{data.frame} with at the columns: 
+    accession, flippedScore, clinsig, maf, hom, set, llr, llrCIleft and llrCIright
+\item{searchScoresets(query)} retrives a table of scoresets for which any field matches the query
+\item{searchVariants(query)} retrieves a table of variants for which the hgvs string matches the query
+\item{getPending()} retrieves a list of URNs of scoresets that are currently in the 'pending' state.
 \end{description}
 }
 \examples{

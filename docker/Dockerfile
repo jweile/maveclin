@@ -60,7 +60,7 @@ RUN Rscript installDependencies.R ${UPDATE_RPKG}
 
 # Create maveclin's directory structure and grant access to apache
 RUN mkdir -p /var/www/html/maveclin/httpdocs/imgcache &&\
-    chmod 777 /var/www/html/maveclin/httpdocs/imgcache
+    chmod 777 /var/www/html/maveclin/httpdocs/imgcache &&\
     mkdir -p /var/www/maveclin/logs &&\
     chmod 777 /var/www/maveclin/logs &&\
     mkdir -p /var/www/maveclin/cache/ &&\
@@ -104,14 +104,14 @@ RUN a2dissite 000-default.conf && a2ensite maveclin
 COPY startup.sh sync.R calibrationCron.R dbInit.sql /setup/
 
 #run DB init script and allow www user to write to DB
-RUN sqlite3 $MAVECLIN_CACHE/maveclin.db < dbInit.sql && \
-    chmod 666 maveclin.db
+RUN sqlite3 ${MAVECLIN_CACHE}maveclin.db < dbInit.sql &&\
+    chmod 666 ${MAVECLIN_CACHE}maveclin.db
 
 
 #setup cronjob for synchronization script
 ADD crontab /etc/cron.d/maveclin-cron
-RUN chmod 0644 /etc/cron.d/maveclin-cron && \
-    crontab /etc/cron.d/maveclin-cron && \
+RUN chmod 0644 /etc/cron.d/maveclin-cron &&\
+    crontab /etc/cron.d/maveclin-cron &&\
     chmod a+x /setup/sync.R /setup/calibrationCron.R
 
 #startup script starts apache and daemon
